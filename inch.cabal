@@ -25,7 +25,10 @@ source-repository head
 
 library
   exposed-modules:
+      Arch
+      Asm
       AST
+      Compile
       Parser
   other-modules:
       Paths_inch
