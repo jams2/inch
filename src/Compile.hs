@@ -1,7 +1,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Compile () where
+module Compile (compileFunctionHeader, compilePrologue) where
 
 import Arch
 import Asm
@@ -9,13 +9,14 @@ import Data.Text qualified as T
 
 compileFunctionHeader :: T.Text -> Program
 compileFunctionHeader name =
-  [ textDirective,
-    globalDirective name,
-    functionDirective name,
-    label name
+  [ TextDirective, -- .text
+    GlobalDirective name, -- .global <name>
+    TypeDirective name Function, -- .type <name>, @function
+    Label name -- <name>:
   ]
 
 -- | Initialize register state
+--  Args passed to scheme_entry by the C runtime:
 --  RDI <- Context
 --  RSI <- stack base
 --  RDX <- heap address
