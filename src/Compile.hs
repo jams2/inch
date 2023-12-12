@@ -1,11 +1,18 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Compile (compileFunctionHeader, compilePrologue) where
+module Compile
+  ( CompilationResult,
+    compileFunctionHeader,
+    compilePrologue,
+    compile,
+  )
+where
 
 import Arch
 import Asm
 import Data.Text qualified as T
+import IR
 
 compileFunctionHeader :: T.Text -> Program
 compileFunctionHeader name =
@@ -44,3 +51,11 @@ compilePrologue =
          ret
        ]
     <> compileFunctionHeader "L_scheme_entry"
+
+newtype CompileError = CompileError T.Text deriving (Show)
+
+type CompilationResult = Either CompileError Program
+
+compile :: IR -> CompilationResult
+compile Noop = Right [nop]
+compile (Constant IR.Nil) = Right [mov Asm.Nil RAX]

@@ -36,3 +36,6 @@ spec = describe "Parser" $ do
     parseMaybe expr "(lambda (x) x)" `shouldBe` Just (Lambda [Symbol "x"] (Symbol "x"))
     parseMaybe expr "(λ (x) x)" `shouldBe` Just (Lambda [Symbol "x"] (Symbol "x"))
     parseMaybe expr "(λ (x y) x)" `shouldBe` Just (Lambda [Symbol "x", Symbol "y"] (Symbol "x"))
+  it "can parse bools" $ do
+    parseMaybe expr "#t" `shouldBe` Just (Bool True)
+    parseMaybe expr "#f" `shouldBe` Just (Bool False)

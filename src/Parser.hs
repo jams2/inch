@@ -47,19 +47,11 @@ stringLiteral =
 fixnum :: Parser Expr
 fixnum = Fixnum <$> lexeme L.decimal <?> "fixnum"
 
-immediate :: Parser Expr
-immediate =
-  choice
-    [ charLiteral,
-      stringLiteral,
-      fixnum
-    ]
-
 nil :: Parser Expr
 nil = Nil <$ lexeme (C.string "nil")
 
-identChars :: [Char]
-identChars = "-<>?=."
+bool :: Parser Expr
+bool = Bool <$> (True <$ lexeme (C.string "#t") <|> False <$ lexeme (C.string "#f"))
 
 symbol :: Parser Expr
 symbol =
@@ -73,6 +65,20 @@ symbol =
             ]
       )
     <?> "symbol"
+
+immediate :: Parser Expr
+immediate =
+  choice
+    [ nil,
+      bool,
+      charLiteral,
+      stringLiteral,
+      fixnum,
+      symbol
+    ]
+
+identChars :: [Char]
+identChars = "-<>?=."
 
 lambda :: Parser Expr
 lambda = do
@@ -94,8 +100,6 @@ app = do
 expr :: Parser Expr
 expr =
   choice
-    [ nil,
-      immediate,
-      symbol,
+    [ immediate,
       try lambda <|> app
     ]
