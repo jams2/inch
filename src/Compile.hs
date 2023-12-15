@@ -6,13 +6,22 @@ module Compile
     compileFunctionHeader,
     compilePrologue,
     compile,
+    compileAll,
   )
 where
 
+import AST
 import Arch
 import Asm
 import Data.Text qualified as T
 import IR
+
+newtype CompileError = CompileError T.Text deriving (Show)
+
+type CompilationResult = Either CompileError Program
+
+compileAll :: Expr -> CompilationResult
+compileAll p = (<> [ret]) . (compilePrologue <>) <$> compile (lower p)
 
 compileFunctionHeader :: T.Text -> Program
 compileFunctionHeader name =
@@ -52,10 +61,8 @@ compilePrologue =
        ]
     <> compileFunctionHeader "L_scheme_entry"
 
-newtype CompileError = CompileError T.Text deriving (Show)
-
-type CompilationResult = Either CompileError Program
-
 compile :: IR -> CompilationResult
 compile Noop = Right [nop]
 compile (Constant IR.Nil) = Right [mov Asm.Nil RAX]
+compile (Constant IR.True) = Right [mov Asm.True RAX]
+compile (Constant IR.False) = Right [mov Asm.False RAX]

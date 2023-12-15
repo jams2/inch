@@ -24,6 +24,8 @@ dependencies:
 - text
 - megaparsec
 - bytestring
+- formatting
+- process
 
 ghc-options:
 - -Wall
@@ -62,3 +64,6 @@ tests:
     - inch
     - hspec
     - hspec-contrib
+    - temporary
+    - directory
+    - filepath

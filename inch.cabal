@@ -42,7 +42,9 @@ library
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , formatting
     , megaparsec
+    , process
     , text
   default-language: Haskell2010
 
@@ -58,8 +60,10 @@ executable inch-exe
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , formatting
     , inch
     , megaparsec
+    , process
     , text
   default-language: Haskell2010
 
@@ -67,6 +71,9 @@ test-suite inch-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Eval.ConstantSpec
+      Eval.Util
+      MainSpec
       ParserSpec
       Paths_inch
   autogen-modules:
@@ -77,9 +84,14 @@ test-suite inch-test
   build-depends:
       base >=4.7 && <5
     , bytestring
+    , directory
+    , filepath
+    , formatting
     , hspec
     , hspec-contrib
     , inch
     , megaparsec
+    , process
+    , temporary
     , text
   default-language: Haskell2010

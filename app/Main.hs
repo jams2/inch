@@ -2,19 +2,13 @@
 
 module Main (main) where
 
-import Asm
-import AST
 import Data.Text.IO qualified as T
 import Compile
 import Emit
-import IR
 import Parser
 import System.IO
 import Text.Megaparsec (parse)
 import Text.Megaparsec.Error (errorBundlePretty)
-
-compileAll :: Expr -> CompilationResult
-compileAll expr = (compilePrologue <>) <$> compile (lower expr)
 
 main :: IO ()
 main = do
@@ -22,5 +16,5 @@ main = do
   case parseResult of
     Left err -> putStr (errorBundlePretty err)
     Right ast -> case compileAll ast of
-      Left err -> putStrLn $ show err
+      Left err -> print err
       Right program -> emit stdout program
