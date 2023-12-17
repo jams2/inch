@@ -26,6 +26,7 @@ dependencies:
 - bytestring
 - formatting
 - process
+- parser-combinators
 
 ghc-options:
 - -Wall

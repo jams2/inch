@@ -21,6 +21,7 @@ import Data.Bits
 import Data.Char
 import Data.Int
 import Data.Text qualified as T
+import Data.Word (Word64)
 import Emit
 import Formatting qualified as F
 
@@ -123,17 +124,21 @@ charShift = 8
 charTag :: Int64
 charTag = 0x0F
 
-immediatePrefix :: F.Format T.Text (Int64 -> T.Text)
+immediatePrefix :: (Integral a) => F.Format T.Text (a -> T.Text)
 immediatePrefix = "$" F.% F.prefixHex
 
-hexFormat :: Int64 -> T.Text
+hexFormat :: (Integral a) => a -> T.Text
 hexFormat = F.sformat immediatePrefix
 
 instance Emit Immediate where
-  toText Nil = hexFormat 0x3F
-  toText Asm.False = hexFormat 0x2F
-  toText Asm.True = hexFormat 0x6F
-  toText (Fixnum i) = hexFormat (shiftL i fxShift .|. fxTag)
+  toText Nil = hexFormat (0x3F :: Int64)
+  toText Asm.False = hexFormat (0x2F :: Int64)
+  toText Asm.True = hexFormat (0x6F :: Int64)
+  -- Negative Int64s cause an error when hex formatting, cast to a Word64
+  toText (Fixnum i) = hexFormat $ toWord (shiftL i fxShift .|. fxTag)
+    where
+      toWord :: Int64 -> Word64
+      toWord = fromIntegral
   toText (Char c) = hexFormat (shiftL (val c) charShift .|. charTag)
     where
       val :: Char -> Int64

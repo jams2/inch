@@ -15,6 +15,7 @@ module Parser
 where
 
 import AST
+import Control.Monad.Combinators
 import Data.Text qualified as T
 import Data.Void
 import Text.Megaparsec
@@ -45,7 +46,9 @@ stringLiteral =
     <?> "string literal"
 
 fixnum :: Parser Expr
-fixnum = Fixnum <$> lexeme L.decimal <?> "fixnum"
+fixnum = Fixnum <$> (L.signed space integer <?> "fixnum")
+  where
+    integer = lexeme L.decimal
 
 nil :: Parser Expr
 nil = Nil <$ lexeme (C.string "nil")
@@ -73,8 +76,7 @@ immediate =
       bool,
       charLiteral,
       stringLiteral,
-      fixnum,
-      symbol
+      try fixnum <|> symbol
     ]
 
 identChars :: [Char]

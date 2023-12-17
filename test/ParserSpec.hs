@@ -11,6 +11,7 @@ spec :: Spec
 spec = describe "Parser" $ do
   it "can parse fixnums" $ do
     parseMaybe expr "1" `shouldBe` Just (Fixnum 1)
+    parseMaybe expr "-1" `shouldBe` Just (Fixnum (-1))
   it "can parse char literals" $ do
     parseMaybe expr "#\\a" `shouldBe` Just (Char 'a')
   it "can parse string literals" $ do
