@@ -14,14 +14,13 @@ import AST
 import Arch
 import Asm
 import Data.Text qualified as T
-import IR
 
 newtype CompileError = CompileError T.Text deriving (Show)
 
 type CompilationResult = Either CompileError Program
 
 compileAll :: Expr -> CompilationResult
-compileAll p = (<> [ret]) . (compilePrologue <>) <$> compile (lower p)
+compileAll p = (<> [ret]) . (compilePrologue <>) <$> compile p
 
 compileFunctionHeader :: T.Text -> Program
 compileFunctionHeader name =
@@ -61,9 +60,9 @@ compilePrologue =
        ]
     <> compileFunctionHeader "L_scheme_entry"
 
-compile :: IR -> CompilationResult
-compile Noop = Right [nop]
-compile (Constant IR.Nil) = Right [mov Asm.Nil RAX]
-compile (Constant IR.True) = Right [mov Asm.True RAX]
-compile (Constant IR.False) = Right [mov Asm.False RAX]
-compile (Constant (IR.Fixnum i)) = Right [mov (Asm.Fixnum i) RAX]
+compile :: Expr -> CompilationResult
+compile AST.Nil = Right [mov Asm.Nil RAX]
+compile (AST.Bool Prelude.True) = Right [mov Asm.True RAX]
+compile (AST.Bool Prelude.False) = Right [mov Asm.False RAX]
+compile (AST.Fixnum i) = Right [mov (Asm.Fixnum i) RAX]
+compile _ = Right [nop]

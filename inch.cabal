@@ -30,7 +30,6 @@ library
       AST
       Compile
       Emit
-      IR
       Parser
   other-modules:
       Paths_inch
