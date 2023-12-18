@@ -14,6 +14,10 @@ spec = describe "Parser" $ do
     parseMaybe expr "-1" `shouldBe` Just (FixnumExpr (-1))
   it "can parse char literals" $ do
     parseMaybe expr "#\\a" `shouldBe` Just (CharExpr 'a')
+    parseMaybe expr "#\\tab" `shouldBe` Just (CharExpr '\t')
+    parseMaybe expr "#\\newline" `shouldBe` Just (CharExpr '\n')
+    parseMaybe expr "#\\return" `shouldBe` Just (CharExpr '\r')
+    parseMaybe expr "#\\space" `shouldBe` Just (CharExpr ' ')
   it "can parse string literals" $ do
     parseMaybe expr "\"foo bar baz\"" `shouldBe` Just (StringExpr "foo bar baz")
     parseMaybe expr "\"foo \\\"bar baz\"" `shouldBe` Just (StringExpr "foo \"bar baz")

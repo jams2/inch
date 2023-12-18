@@ -37,7 +37,16 @@ parens :: Parser a -> Parser a
 parens = between (word "(") (word ")")
 
 charLiteral :: Parser Expr
-charLiteral = CharExpr <$> lexeme (C.string "#\\" *> L.charLiteral) <?> "character literal"
+charLiteral = CharExpr <$> lexeme (choice ps) <?> "character literal"
+  where
+    ps =
+      [ C.string "#\\tab" *> return '\t',
+        C.string "#\\newline" *> return '\n',
+        C.string "#\\return" *> return '\r',
+        C.string "#\\space" *> return ' ',
+        C.string "#\\\\" *> return '\\',
+        C.string "#\\" *> L.charLiteral
+      ]
 
 stringLiteral :: Parser Expr
 stringLiteral =
