@@ -105,11 +105,11 @@ instance ToOperand Operand where
 infixl 4 %
 
 data Immediate
-  = Nil
-  | True
-  | False
-  | Char !Char
-  | Fixnum !Int64
+  = NilI
+  | TrueI
+  | FalseI
+  | CharI !Char
+  | FixI !Int64
   deriving (Show, Eq)
 
 fxShift :: Int
@@ -131,15 +131,15 @@ hexFormat :: (Integral a) => a -> T.Text
 hexFormat = F.sformat immediatePrefix
 
 instance Emit Immediate where
-  toText Nil = hexFormat (0x3F :: Int64)
-  toText Asm.False = hexFormat (0x2F :: Int64)
-  toText Asm.True = hexFormat (0x6F :: Int64)
+  toText NilI = hexFormat (0x3F :: Int64)
+  toText FalseI = hexFormat (0x2F :: Int64)
+  toText TrueI = hexFormat (0x6F :: Int64)
   -- Negative Int64s cause an error when hex formatting, cast to a Word64
-  toText (Fixnum i) = hexFormat $ toWord (shiftL i fxShift .|. fxTag)
+  toText (FixI i) = hexFormat $ toWord (shiftL i fxShift .|. fxTag)
     where
       toWord :: Int64 -> Word64
       toWord = fromIntegral
-  toText (Char c) = hexFormat (shiftL (val c) charShift .|. charTag)
+  toText (CharI c) = hexFormat (shiftL (val c) charShift .|. charTag)
     where
       val :: Char -> Int64
       val = fromIntegral . ord

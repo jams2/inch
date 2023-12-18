@@ -61,8 +61,8 @@ compilePrologue =
     <> compileFunctionHeader "L_scheme_entry"
 
 compile :: Expr -> CompilationResult
-compile AST.Nil = Right [mov Asm.Nil RAX]
-compile (AST.Bool Prelude.True) = Right [mov Asm.True RAX]
-compile (AST.Bool Prelude.False) = Right [mov Asm.False RAX]
-compile (AST.Fixnum i) = Right [mov (Asm.Fixnum i) RAX]
+compile NilExpr = Right [mov NilI RAX]
+compile TrueExpr = Right [mov TrueI RAX]
+compile FalseExpr = Right [mov FalseI RAX]
+compile (FixnumExpr i) = Right [mov (FixI i) RAX]
 compile _ = Right [nop]

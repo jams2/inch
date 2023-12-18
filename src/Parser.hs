@@ -37,28 +37,28 @@ parens :: Parser a -> Parser a
 parens = between (word "(") (word ")")
 
 charLiteral :: Parser Expr
-charLiteral = AST.Char <$> lexeme (C.string "#\\" *> L.charLiteral) <?> "character literal"
+charLiteral = CharExpr <$> lexeme (C.string "#\\" *> L.charLiteral) <?> "character literal"
 
 stringLiteral :: Parser Expr
 stringLiteral =
-  String . T.pack
+  StringExpr . T.pack
     <$> lexeme (C.char '\"' *> manyTill L.charLiteral (C.char '\"'))
     <?> "string literal"
 
 fixnum :: Parser Expr
-fixnum = Fixnum <$> (L.signed space integer <?> "fixnum")
+fixnum = FixnumExpr <$> (L.signed space integer <?> "fixnum")
   where
     integer = lexeme L.decimal
 
 nil :: Parser Expr
-nil = Nil <$ lexeme (C.string "nil")
+nil = NilExpr <$ lexeme (C.string "nil")
 
 bool :: Parser Expr
-bool = Bool <$> (True <$ lexeme (C.string "#t") <|> False <$ lexeme (C.string "#f"))
+bool = BoolExpr <$> (True <$ lexeme (C.string "#t") <|> False <$ lexeme (C.string "#f"))
 
 symbol :: Parser Expr
 symbol =
-  Symbol . T.pack
+  SymbolExpr . T.pack
     <$> lexeme
       ( some $
           choice
@@ -89,7 +89,7 @@ lambda = do
   args <- parens $ many symbol
   body <- expr
   _ <- word ")"
-  return $ Lambda args body
+  return $ LambdaExpr args body
 
 app :: Parser Expr
 app = do
@@ -97,7 +97,7 @@ app = do
   rator <- expr
   rands <- many expr
   _ <- word ")"
-  return $ App rator rands
+  return $ AppExpr rator rands
 
 expr :: Parser Expr
 expr =
