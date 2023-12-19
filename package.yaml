@@ -27,6 +27,8 @@ dependencies:
 - formatting
 - process
 - parser-combinators
+- unordered-containers
+- mtl
 
 ghc-options:
 - -Wall

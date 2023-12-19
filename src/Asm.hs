@@ -10,6 +10,7 @@ module Asm
     Immediate (..),
     mov,
     call,
+    add,
     ret,
     nop,
     (%),
@@ -54,6 +55,7 @@ data Instruction
   = Jmp !Operand
   | Mov !Operand !Operand
   | Call !Operand
+  | Add !Operand !Operand
   | Ret
   | Nop
   deriving (Show)
@@ -62,11 +64,15 @@ instance Emit Instruction where
   toText (Jmp x) = indent $ T.intercalate " " ["jmp", Emit.toText x]
   toText (Mov s d) = indent $ T.intercalate " " ["movq", Emit.toText s, ",", Emit.toText d]
   toText (Call x) = indent $ T.intercalate " " ["call", Emit.toText x]
+  toText (Add x y) = indent $ T.intercalate " " ["addq", Emit.toText x, Emit.toText y]
   toText Ret = indent "ret"
   toText Nop = indent "nop"
 
 mov :: (ToOperand a, ToOperand b) => a -> b -> Line
 mov x y = Instruction $ Mov (toOperand x) (toOperand y)
+
+add :: (ToOperand a, ToOperand b) => a -> b -> Line
+add x y = Instruction $ Add (toOperand x) (toOperand y)
 
 call :: T.Text -> Line
 call = Instruction . Call . Location
