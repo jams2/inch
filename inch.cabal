@@ -77,6 +77,7 @@ test-suite inch-test
   main-is: Spec.hs
   other-modules:
       Eval.ConstantSpec
+      Eval.PrimCall.UnarySpec
       Eval.Util
       MainSpec
       ParserSpec

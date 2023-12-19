@@ -8,7 +8,7 @@ import Test.Hspec
 spec :: Spec
 spec = do
   (runtime, asm, bin) <- runIO getTestFiles
-  describe "Eval" $ do
+  describe "Eval constants" $ do
     let shouldPrint = shouldPrint' runtime asm bin
     it "Evaluates constants" $ do
       "nil" `shouldPrint` "()\n"

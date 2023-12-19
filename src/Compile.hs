@@ -26,7 +26,7 @@ type Env a = Map.HashMap T.Text a
 type CompilationEnv = Reader (Env Primitive) CompilationResult
 
 -- | arity, compiler
-data Primitive = Primitive !Int !(Expr -> CompilationEnv)
+data Primitive = Primitive !Int !([Expr] -> CompilationEnv)
 
 compileAll :: Expr -> CompilationResult
 compileAll p = (<> [ret]) . (compilePrologue <>) <$> runReader (compile p) primitives
@@ -75,10 +75,21 @@ compile TrueExpr = return $ Right [mov TrueI RAX]
 compile FalseExpr = return $ Right [mov FalseI RAX]
 compile (FixnumExpr i) = return $ Right [mov (FixI i) RAX]
 compile (CharExpr c) = return $ Right [mov (CharI c) RAX]
+compile (AppExpr (SymbolExpr rator) rands) = do
+  compiler <- asks (Map.lookup rator)
+  case compiler of
+    Nothing -> return $ Left (CompileError $ "Unknown operator: " <> rator)
+    Just p -> compilePrimCall rator p rands
 compile _ = return $ Right [nop]
 
-compileFxadd1 :: Expr -> CompilationEnv
-compileFxadd1 (AppExpr (SymbolExpr "fxadd1") [rand]) = do
+compilePrimCall :: T.Text -> Primitive -> [Expr] -> CompilationEnv
+compilePrimCall rator (Primitive arity f) rands
+  | length rands /= arity =
+      return $ Left (CompileError $ "Wrong number of arguments to " <> rator)
+  | otherwise = f rands
+
+compileFxadd1 :: [Expr] -> CompilationEnv
+compileFxadd1 [rand] = do
   prologue <- compile rand
   return ((<> [add (FixI 1) RAX]) <$> prologue)
 compileFxadd1 _ = return $ Left (CompileError "compileFxadd1: invalid invocation")
