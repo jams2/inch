@@ -9,8 +9,9 @@ module Asm
     SymbolType (..),
     Immediate (..),
     mov,
-    call,
     add,
+    sub,
+    call,
     ret,
     nop,
     (%),
@@ -52,27 +53,40 @@ instance Emit Line where
 data SymbolType = Function | Object deriving (Show)
 
 data Instruction
-  = Jmp !Operand
-  | Mov !Operand !Operand
-  | Call !Operand
+  = Mov !Operand !Operand
   | Add !Operand !Operand
+  | Sub !Operand !Operand
+  | Jmp !Operand
+  | Call !Operand
   | Ret
   | Nop
   deriving (Show)
 
 instance Emit Instruction where
-  toText (Jmp x) = indent $ T.intercalate " " ["jmp", Emit.toText x]
   toText (Mov s d) = indent $ T.intercalate " " ["movq", Emit.toText s, ",", Emit.toText d]
+  toText (Add x y) = indent $ T.intercalate " " ["addq", Emit.toText x, ",", Emit.toText y]
+  toText (Sub x y) = indent $ T.intercalate " " ["subq", Emit.toText x, ",", Emit.toText y]
+  toText (Jmp x) = indent $ T.intercalate " " ["jmp", Emit.toText x]
   toText (Call x) = indent $ T.intercalate " " ["call", Emit.toText x]
-  toText (Add x y) = indent $ T.intercalate " " ["addq", Emit.toText x, "," , Emit.toText y]
   toText Ret = indent "ret"
   toText Nop = indent "nop"
 
+binaryOp ::
+  (ToOperand a, ToOperand b) =>
+  (Operand -> Operand -> Instruction) -> -- Operand constructor
+  a ->
+  b ->
+  Line
+binaryOp x p q = Instruction $ x (toOperand p) (toOperand q)
+
 mov :: (ToOperand a, ToOperand b) => a -> b -> Line
-mov x y = Instruction $ Mov (toOperand x) (toOperand y)
+mov = binaryOp Mov
 
 add :: (ToOperand a, ToOperand b) => a -> b -> Line
-add x y = Instruction $ Add (toOperand x) (toOperand y)
+add = binaryOp Add
+
+sub :: (ToOperand a, ToOperand b) => a -> b -> Line
+sub = binaryOp Sub
 
 call :: T.Text -> Line
 call = Instruction . Call . Location

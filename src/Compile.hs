@@ -94,5 +94,15 @@ compileFxadd1 [rand] = do
   return ((<> [add (FixI 1) RAX]) <$> prologue)
 compileFxadd1 _ = return $ Left (CompileError "compileFxadd1: invalid invocation")
 
+compileFxsub1 :: [Expr] -> CompilationEnv
+compileFxsub1 [rand] = do
+  prologue <- compile rand
+  return ((<> [sub (FixI 1) RAX]) <$> prologue)
+compileFxsub1 _ = return $ Left (CompileError "compileFxsub1: invalid invocation")
+
 primitives :: Env Primitive
-primitives = Map.fromList [("fxadd1", Primitive 1 compileFxadd1)]
+primitives =
+  Map.fromList
+    [ ("fxadd1", Primitive 1 compileFxadd1),
+      ("fxsub1", Primitive 1 compileFxsub1)
+    ]

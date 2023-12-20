@@ -7,14 +7,14 @@ import Test.Hspec
 
 spec :: Spec
 spec = do
-  (runtime, asm, bin) <- runIO getTestFiles
-  describe "Eval constants" $ do
+  (runtime, asm, bin) <- runIO (getTestFiles "constants")
+  describe "Compile and run constants" $ do
     let shouldPrint = shouldPrint' runtime asm bin
-    it "Evaluates constants" $ do
+    it "compiles and runs constants" $ do
       "nil" `shouldPrint` "()\n"
       "#t" `shouldPrint` "#t\n"
       "#f" `shouldPrint` "#f\n"
-    it "Evaluates fixnums" $ do
+    it "compiles and runs fixnums" $ do
       "0" `shouldPrint` "0\n"
       "1" `shouldPrint` "1\n"
       "-1" `shouldPrint` "-1\n"
@@ -24,7 +24,7 @@ spec = do
       "-2736" `shouldPrint` "-2736\n"
       "536870911" `shouldPrint` "536870911\n"
       "-536870912" `shouldPrint` "-536870912\n"
-    it "Evaluates chars" $ do
+    it "compiles and runs chars" $ do
       "#\\tab" `shouldPrint` "#\\tab\n"
       "#\\newline" `shouldPrint` "#\\newline\n"
       "#\\return" `shouldPrint` "#\\return\n"

@@ -32,8 +32,8 @@ shouldPrint' runtime asm bin p s = do
   out <- compileAndRun runtime asm bin p
   out `shouldBe` s
 
-getTestFiles :: IO (FilePath, FilePath, FilePath) -- startup.c, test.s, test exe
-getTestFiles = do
+getTestFiles :: String -> IO (FilePath, FilePath, FilePath) -- startup.c, test.s, test exe
+getTestFiles testName = do
   root <- getCurrentDirectory
-  tmp <- getCanonicalTemporaryDirectory >>= (`createTempDirectory` "inch-test")
+  tmp <- getCanonicalTemporaryDirectory >>= (`createTempDirectory` ("inch-test--" ++ testName))
   return (root </> "startup.c", tmp </> "test.s", tmp </> "test")
