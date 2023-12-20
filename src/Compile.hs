@@ -100,9 +100,29 @@ compileFxsub1 [rand] = do
   return ((<> [sub (FixI 1) RAX]) <$> prologue)
 compileFxsub1 _ = return $ Left (CompileError "compileFxsub1: invalid invocation")
 
+compileFixnumToChar :: [Expr] -> CompilationEnv
+compileFixnumToChar [rand] = do
+  prologue <- compile rand
+  return ((<> p) <$> prologue)
+  where
+    p = [shl shift RAX, Asm.or tag RAX]
+    shift = int $ charShift - fxShift
+    tag = int charTag
+compileFixnumToChar _ = return $ Left (CompileError "compileFixnumToChar: invalid invocation")
+
+compileCharToFixnum :: [Expr] -> CompilationEnv
+compileCharToFixnum [rand] = do
+  prologue <- compile rand
+  return ((<> [shr shift RAX]) <$> prologue)
+  where
+    shift = int $ charShift - fxShift
+compileCharToFixnum _ = return $ Left (CompileError "compileCharToFixnum: invalid invocation")
+
 primitives :: Env Primitive
 primitives =
   Map.fromList
     [ ("fxadd1", Primitive 1 compileFxadd1),
-      ("fxsub1", Primitive 1 compileFxsub1)
+      ("fxsub1", Primitive 1 compileFxsub1),
+      ("fixnum->char", Primitive 1 compileFixnumToChar),
+      ("char->fixnum", Primitive 1 compileCharToFixnum)
     ]

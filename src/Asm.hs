@@ -8,13 +8,20 @@ module Asm
     Instruction (..),
     SymbolType (..),
     Immediate (..),
+    int,
     mov,
     add,
     sub,
+    shl,
+    shr,
+    Asm.or,
     call,
     ret,
     nop,
     (%),
+    charShift,
+    charTag,
+    fxShift,
   )
 where
 
@@ -56,18 +63,30 @@ data Instruction
   = Mov !Operand !Operand
   | Add !Operand !Operand
   | Sub !Operand !Operand
+  | Shl !Operand !Operand
+  | Shr !Operand !Operand
+  | Or !Operand !Operand
   | Jmp !Operand
   | Call !Operand
   | Ret
   | Nop
   deriving (Show)
 
+formatBinary :: (Emit a, Emit b) => T.Text -> a -> b -> T.Text
+formatBinary op s d = indent $ T.intercalate " " [op, Emit.toText s, ",", Emit.toText d]
+
+formatUnary :: (Emit a) => T.Text -> a -> T.Text
+formatUnary op d = indent $ T.intercalate " " [op, Emit.toText d]
+
 instance Emit Instruction where
-  toText (Mov s d) = indent $ T.intercalate " " ["movq", Emit.toText s, ",", Emit.toText d]
-  toText (Add x y) = indent $ T.intercalate " " ["addq", Emit.toText x, ",", Emit.toText y]
-  toText (Sub x y) = indent $ T.intercalate " " ["subq", Emit.toText x, ",", Emit.toText y]
-  toText (Jmp x) = indent $ T.intercalate " " ["jmp", Emit.toText x]
-  toText (Call x) = indent $ T.intercalate " " ["call", Emit.toText x]
+  toText (Mov s d) = formatBinary "movq" s d
+  toText (Add s d) = formatBinary "addq" s d
+  toText (Sub s d) = formatBinary "subq" s d
+  toText (Shl s d) = formatBinary "shlq" s d
+  toText (Shr s d) = formatBinary "shrq" s d
+  toText (Or s d) = formatBinary "orq" s d
+  toText (Jmp d) = formatUnary "jmp" d
+  toText (Call d) = formatUnary "call" d
   toText Ret = indent "ret"
   toText Nop = indent "nop"
 
@@ -87,6 +106,15 @@ add = binaryOp Add
 
 sub :: (ToOperand a, ToOperand b) => a -> b -> Line
 sub = binaryOp Sub
+
+shl :: (ToOperand a, ToOperand b) => a -> b -> Line
+shl = binaryOp Shl
+
+shr :: (ToOperand a, ToOperand b) => a -> b -> Line
+shr = binaryOp Shr
+
+or :: (ToOperand a, ToOperand b) => a -> b -> Line
+or = binaryOp Or
 
 call :: T.Text -> Line
 call = Instruction . Call . Location
@@ -130,7 +158,11 @@ data Immediate
   | FalseI
   | CharI !Char
   | FixI !Int64
+  | IntI !Int
   deriving (Show, Eq)
+
+int :: Integral a => a -> Immediate
+int i = IntI $ fromIntegral i
 
 fxShift :: Int
 fxShift = 2
@@ -151,6 +183,7 @@ hexFormat :: (Integral a) => a -> T.Text
 hexFormat = F.sformat immediatePrefix
 
 instance Emit Immediate where
+  toText (IntI i) = hexFormat i
   toText NilI = hexFormat (0x3F :: Int64)
   toText FalseI = hexFormat (0x2F :: Int64)
   toText TrueI = hexFormat (0x6F :: Int64)
