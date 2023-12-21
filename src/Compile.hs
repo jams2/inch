@@ -88,35 +88,49 @@ compilePrimCall rator (Primitive arity f) rands
       return $ Left (CompileError $ "Wrong number of arguments to " <> rator)
   | otherwise = f rands
 
-compileFxadd1 :: [Expr] -> CompilationEnv
-compileFxadd1 [rand] = do
+unaryPrimCall :: T.Text -> [Expr] -> Program -> CompilationEnv
+unaryPrimCall _ [rand] p = do
   prologue <- compile rand
-  return ((<> [add (FixI 1) RAX]) <$> prologue)
-compileFxadd1 _ = return $ Left (CompileError "compileFxadd1: invalid invocation")
+  return $ (<> p) <$> prologue
+unaryPrimCall name _ _ =
+  return $
+    Left (CompileError $ name <> ": invalid invocation")
+
+compileFxadd1 :: [Expr] -> CompilationEnv
+compileFxadd1 rands = unaryPrimCall "compileFxadd1" rands [add (FixI 1) RAX]
 
 compileFxsub1 :: [Expr] -> CompilationEnv
-compileFxsub1 [rand] = do
-  prologue <- compile rand
-  return ((<> [sub (FixI 1) RAX]) <$> prologue)
-compileFxsub1 _ = return $ Left (CompileError "compileFxsub1: invalid invocation")
+compileFxsub1 rands = unaryPrimCall "compileFxsub1" rands [sub (FixI 1) RAX]
 
 compileFixnumToChar :: [Expr] -> CompilationEnv
-compileFixnumToChar [rand] = do
-  prologue <- compile rand
-  return ((<> p) <$> prologue)
+compileFixnumToChar rands = unaryPrimCall "compileFixnumToChar" rands p
   where
-    p = [shl shift RAX, Asm.or tag RAX]
-    shift = int $ charShift - fxShift
+    p = [shl i RAX, Asm.or tag RAX]
+    i = int $ charShift - fxShift
     tag = int charTag
-compileFixnumToChar _ = return $ Left (CompileError "compileFixnumToChar: invalid invocation")
 
 compileCharToFixnum :: [Expr] -> CompilationEnv
-compileCharToFixnum [rand] = do
-  prologue <- compile rand
-  return ((<> [shr shift RAX]) <$> prologue)
+compileCharToFixnum rands = unaryPrimCall "compileCharToFixnum" rands [shr i RAX]
   where
-    shift = int $ charShift - fxShift
-compileCharToFixnum _ = return $ Left (CompileError "compileCharToFixnum: invalid invocation")
+    i = int $ charShift - fxShift
+
+boolCmp :: Program
+boolCmp =
+  [ sete AL, -- set al to 1 if equal
+    movzb AL RAX, -- extend al to fill rax
+    shl i RAX, -- shift the result to the T/F discriminant bit
+    Asm.or f AL -- fill the leading bits with bool prefix
+  ]
+  where
+    i = int (6 :: Int)
+    f = int (0x2F :: Int)
+
+compileFixnumP :: [Expr] -> CompilationEnv
+compileFixnumP rands = unaryPrimCall "compileFixnumP" rands p
+  where
+    p = [Asm.and mask RAX, cmp tag RAX] <> boolCmp
+    mask = int fxMask
+    tag = int fxTag
 
 primitives :: Env Primitive
 primitives =
@@ -124,5 +138,6 @@ primitives =
     [ ("fxadd1", Primitive 1 compileFxadd1),
       ("fxsub1", Primitive 1 compileFxsub1),
       ("fixnum->char", Primitive 1 compileFixnumToChar),
-      ("char->fixnum", Primitive 1 compileCharToFixnum)
+      ("char->fixnum", Primitive 1 compileCharToFixnum),
+      ("fixnum?", Primitive 1 compileFixnumP)
     ]

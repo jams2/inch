@@ -15,18 +15,24 @@ module Asm
     shl,
     shr,
     Asm.or,
+    Asm.and,
+    cmp,
+    movzb,
     call,
     ret,
+    sete,
     nop,
     (%),
     charShift,
     charTag,
+    fxMask,
     fxShift,
+    fxTag,
   )
 where
 
 import Arch
-import Data.Bits
+import Data.Bits (shiftL, (.|.))
 import Data.Char
 import Data.Int
 import Data.Text qualified as T
@@ -61,13 +67,17 @@ data SymbolType = Function | Object deriving (Show)
 
 data Instruction
   = Mov !Operand !Operand
+  | Movzb !Operand !Operand
   | Add !Operand !Operand
   | Sub !Operand !Operand
   | Shl !Operand !Operand
   | Shr !Operand !Operand
   | Or !Operand !Operand
+  | And !Operand !Operand
+  | Cmp !Operand !Operand
   | Jmp !Operand
   | Call !Operand
+  | Sete !Operand
   | Ret
   | Nop
   deriving (Show)
@@ -84,9 +94,13 @@ instance Emit Instruction where
   toText (Sub s d) = formatBinary "subq" s d
   toText (Shl s d) = formatBinary "shlq" s d
   toText (Shr s d) = formatBinary "shrq" s d
-  toText (Or s d) = formatBinary "orq" s d
+  toText (Or s d) = formatBinary "or" s d
+  toText (And s d) = formatBinary "andq" s d
+  toText (Cmp s d) = formatBinary "cmp" s d
+  toText (Movzb s d) = formatBinary "movzbq" s d
   toText (Jmp d) = formatUnary "jmp" d
   toText (Call d) = formatUnary "call" d
+  toText (Sete d) = formatUnary "sete" d
   toText Ret = indent "ret"
   toText Nop = indent "nop"
 
@@ -115,6 +129,18 @@ shr = binaryOp Shr
 
 or :: (ToOperand a, ToOperand b) => a -> b -> Line
 or = binaryOp Or
+
+and :: (ToOperand a, ToOperand b) => a -> b -> Line
+and = binaryOp And
+
+cmp :: (ToOperand a, ToOperand b) => a -> b -> Line
+cmp = binaryOp Cmp
+
+movzb :: (ToOperand a, ToOperand b) => a -> b -> Line
+movzb = binaryOp Movzb
+
+sete :: (ToOperand a) => a -> Line
+sete = Instruction . Sete . toOperand
 
 call :: T.Text -> Line
 call = Instruction . Call . Location
@@ -161,7 +187,7 @@ data Immediate
   | IntI !Int
   deriving (Show, Eq)
 
-int :: Integral a => a -> Immediate
+int :: (Integral a) => a -> Immediate
 int i = IntI $ fromIntegral i
 
 fxShift :: Int
@@ -169,6 +195,9 @@ fxShift = 2
 
 fxTag :: Int64
 fxTag = 0
+
+fxMask :: Int
+fxMask = 3
 
 charShift :: Int
 charShift = 8

@@ -8,6 +8,7 @@ import Emit
 
 data Register
   = RAX
+  | AL
   | RBX
   | RCX
   | RDX
