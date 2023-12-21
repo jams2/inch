@@ -1,4 +1,5 @@
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Compile
@@ -13,7 +14,7 @@ where
 import AST
 import Arch
 import Asm
-import Control.Monad.Reader
+import Control.Monad.State.Lazy
 import Data.HashMap.Strict qualified as Map
 import Data.Text qualified as T
 
@@ -23,13 +24,20 @@ type CompilationResult = Either CompileError Program
 
 type Env a = Map.HashMap T.Text a
 
-type CompilationEnv = Reader (Env Primitive) CompilationResult
+newtype CompilationState = CompilationState {primitiveEnv :: Env Primitive}
+
+type CompilationEnv = State CompilationState CompilationResult
 
 -- | arity, compiler
 data Primitive = Primitive !Int !([Expr] -> CompilationEnv)
 
+initialState :: CompilationState
+initialState = CompilationState {primitiveEnv}
+  where
+    primitiveEnv = primitives
+
 compileAll :: Expr -> CompilationResult
-compileAll p = (<> [ret]) . (compilePrologue <>) <$> runReader (compile p) primitives
+compileAll p = (<> [ret]) . (compilePrologue <>) <$> evalState (compile p) initialState
 
 compileFunctionHeader :: T.Text -> Program
 compileFunctionHeader name =
@@ -76,7 +84,7 @@ compile FalseExpr = return $ Right [mov FalseI RAX]
 compile (FixnumExpr i) = return $ Right [mov (FixI i) RAX]
 compile (CharExpr c) = return $ Right [mov (CharI c) RAX]
 compile (AppExpr (SymbolExpr rator) rands) = do
-  compiler <- asks (Map.lookup rator)
+  compiler <- gets (Map.lookup rator . primitiveEnv)
   case compiler of
     Nothing -> return $ Left (CompileError $ "Unknown operator: " <> rator)
     Just p -> compilePrimCall rator p rands
