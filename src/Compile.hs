@@ -14,6 +14,7 @@ where
 import AST
 import Arch
 import Asm
+import Constants qualified as C
 import Control.Monad.State.Lazy
 import Data.HashMap.Strict qualified as Map
 import Data.Text qualified as T
@@ -114,13 +115,13 @@ compileFixnumToChar :: [Expr] -> CompilationEnv
 compileFixnumToChar rands = unaryPrimCall "compileFixnumToChar" rands p
   where
     p = [shl i RAX, Asm.or tag RAX]
-    i = int $ charShift - fxShift
-    tag = int charTag
+    i = int $ C.charShift - C.fxShift
+    tag = int C.charTag
 
 compileCharToFixnum :: [Expr] -> CompilationEnv
 compileCharToFixnum rands = unaryPrimCall "compileCharToFixnum" rands [shr i RAX]
   where
-    i = int $ charShift - fxShift
+    i = int $ C.charShift - C.fxShift
 
 boolCmp :: Program
 boolCmp =
@@ -137,13 +138,18 @@ compileFixnumP :: [Expr] -> CompilationEnv
 compileFixnumP rands = unaryPrimCall "compileFixnumP" rands p
   where
     p = [Asm.and mask RAX, cmp tag RAX] <> boolCmp
-    mask = int fxMask
-    tag = int fxTag
+    mask = int C.fxMask
+    tag = int C.fxTag
 
 compileFxzeroP :: [Expr] -> CompilationEnv
 compileFxzeroP rands = unaryPrimCall "compileFxzeroP" rands p
   where
     p = [cmp (int (0 :: Int)) RAX] <> boolCmp
+
+compileNullP :: [Expr] -> CompilationEnv
+compileNullP rands = unaryPrimCall "compileNullP" rands p
+  where
+    p = [cmp (int C.nil) RAX] <> boolCmp
 
 primitives :: Env Primitive
 primitives =
@@ -153,5 +159,6 @@ primitives =
       ("fixnum->char", Primitive 1 compileFixnumToChar),
       ("char->fixnum", Primitive 1 compileCharToFixnum),
       ("fixnum?", Primitive 1 compileFixnumP),
-      ("fxzero?", Primitive 1 compileFxzeroP)
+      ("fxzero?", Primitive 1 compileFxzeroP),
+      ("null?", Primitive 1 compileNullP)
     ]

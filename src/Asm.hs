@@ -23,15 +23,11 @@ module Asm
     sete,
     nop,
     (%),
-    charShift,
-    charTag,
-    fxMask,
-    fxShift,
-    fxTag,
   )
 where
 
 import Arch
+import Constants qualified as C
 import Data.Bits (shiftL, (.|.))
 import Data.Char
 import Data.Int
@@ -190,21 +186,6 @@ data Immediate
 int :: (Integral a) => a -> Immediate
 int i = IntI $ fromIntegral i
 
-fxShift :: Int
-fxShift = 2
-
-fxTag :: Int32
-fxTag = 0
-
-fxMask :: Int
-fxMask = 3
-
-charShift :: Int
-charShift = 8
-
-charTag :: Int32
-charTag = 0x0F
-
 immediatePrefix :: (Integral a) => F.Format T.Text (a -> T.Text)
 immediatePrefix = "$" F.% F.prefixHex
 
@@ -213,15 +194,15 @@ hexFormat = F.sformat immediatePrefix
 
 instance Emit Immediate where
   toText (IntI i) = hexFormat i
-  toText NilI = hexFormat (0x3F :: Int32)
-  toText FalseI = hexFormat (0x2F :: Int32)
-  toText TrueI = hexFormat (0x6F :: Int32)
+  toText NilI = hexFormat C.nil
+  toText FalseI = hexFormat C.false
+  toText TrueI = hexFormat C.true
   -- Negative Int32s cause an error when hex formatting, cast to a Word64
-  toText (FixI i) = hexFormat $ toWord (shiftL i fxShift .|. fxTag)
+  toText (FixI i) = hexFormat $ toWord (shiftL i C.fxShift .|. C.fxTag)
     where
       toWord :: Int32 -> Word64
       toWord = fromIntegral
-  toText (CharI c) = hexFormat (shiftL (val c) charShift .|. charTag)
+  toText (CharI c) = hexFormat (shiftL (val c) C.charShift .|. C.charTag)
     where
       val :: Char -> Int32
       val = fromIntegral . ord

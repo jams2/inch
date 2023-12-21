@@ -41,7 +41,7 @@ spec = describe "Parser" $ do
             [AppExpr (SymbolExpr "bar") [SymbolExpr "baz"]]
         )
   it "can parse nil" $ do
-    parseMaybe expr "nil" `shouldBe` Just NilExpr
+    parseMaybe expr "()" `shouldBe` Just NilExpr
   it "can parse lambdas" $ do
     parseMaybe expr "(lambda (x) x)"
       `shouldBe` Just

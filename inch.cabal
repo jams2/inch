@@ -29,6 +29,7 @@ library
       Asm
       AST
       Compile
+      Constants
       Emit
       Parser
   other-modules:

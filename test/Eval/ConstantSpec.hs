@@ -11,7 +11,7 @@ spec = do
   describe "Compile and run constants" $ do
     let shouldPrint = shouldPrint' runtime asm bin
     it "compiles and runs constants" $ do
-      "nil" `shouldPrint` "()\n"
+      "()" `shouldPrint` "()\n"
       "#t" `shouldPrint` "#t\n"
       "#f" `shouldPrint` "#f\n"
     it "compiles and runs fixnums" $ do
