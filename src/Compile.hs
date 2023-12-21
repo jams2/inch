@@ -140,6 +140,11 @@ compileFixnumP rands = unaryPrimCall "compileFixnumP" rands p
     mask = int fxMask
     tag = int fxTag
 
+compileFxzeroP :: [Expr] -> CompilationEnv
+compileFxzeroP rands = unaryPrimCall "compileFxzeroP" rands p
+  where
+    p = [cmp (int (0 :: Int)) RAX] <> boolCmp
+
 primitives :: Env Primitive
 primitives =
   Map.fromList
@@ -147,5 +152,6 @@ primitives =
       ("fxsub1", Primitive 1 compileFxsub1),
       ("fixnum->char", Primitive 1 compileFixnumToChar),
       ("char->fixnum", Primitive 1 compileCharToFixnum),
-      ("fixnum?", Primitive 1 compileFixnumP)
+      ("fixnum?", Primitive 1 compileFixnumP),
+      ("fxzero?", Primitive 1 compileFxzeroP)
     ]

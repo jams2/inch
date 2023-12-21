@@ -63,3 +63,9 @@ spec = do
       "(fixnum? (fixnum? #\\A))" `shouldPrint` "#f\n"
       "(fixnum? (char->fixnum #\\r))" `shouldPrint` "#t\n"
       "(fixnum? (fixnum->char 12))" `shouldPrint` "#f\n"
+    it "compiles and runs fxzero?" $ do
+      "(fxzero? 0)" `shouldPrint` "#t\n"
+      "(fxzero? 1)" `shouldPrint` "#f\n"
+      "(fxzero? -1)" `shouldPrint` "#f\n"
+      "(fxzero? 64)" `shouldPrint` "#f\n"
+      "(fxzero? 960)" `shouldPrint` "#f\n"
