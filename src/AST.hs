@@ -3,7 +3,7 @@
 
 module AST (Expr (..), pattern TrueExpr, pattern FalseExpr) where
 
-import Data.Int (Int64)
+import Data.Int (Int32)
 import Data.Text qualified as T
 
 data Expr
@@ -12,7 +12,7 @@ data Expr
   | AppExpr !Expr ![Expr]
   | CharExpr !Char
   | StringExpr !T.Text
-  | FixnumExpr !Int64
+  | FixnumExpr !Int32
   | BoolExpr !Bool
   | NilExpr
   deriving (Show, Eq)

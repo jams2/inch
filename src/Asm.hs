@@ -183,7 +183,7 @@ data Immediate
   | TrueI
   | FalseI
   | CharI !Char
-  | FixI !Int64
+  | FixI !Int32
   | IntI !Int
   deriving (Show, Eq)
 
@@ -193,7 +193,7 @@ int i = IntI $ fromIntegral i
 fxShift :: Int
 fxShift = 2
 
-fxTag :: Int64
+fxTag :: Int32
 fxTag = 0
 
 fxMask :: Int
@@ -202,7 +202,7 @@ fxMask = 3
 charShift :: Int
 charShift = 8
 
-charTag :: Int64
+charTag :: Int32
 charTag = 0x0F
 
 immediatePrefix :: (Integral a) => F.Format T.Text (a -> T.Text)
@@ -213,17 +213,17 @@ hexFormat = F.sformat immediatePrefix
 
 instance Emit Immediate where
   toText (IntI i) = hexFormat i
-  toText NilI = hexFormat (0x3F :: Int64)
-  toText FalseI = hexFormat (0x2F :: Int64)
-  toText TrueI = hexFormat (0x6F :: Int64)
-  -- Negative Int64s cause an error when hex formatting, cast to a Word64
+  toText NilI = hexFormat (0x3F :: Int32)
+  toText FalseI = hexFormat (0x2F :: Int32)
+  toText TrueI = hexFormat (0x6F :: Int32)
+  -- Negative Int32s cause an error when hex formatting, cast to a Word64
   toText (FixI i) = hexFormat $ toWord (shiftL i fxShift .|. fxTag)
     where
-      toWord :: Int64 -> Word64
+      toWord :: Int32 -> Word64
       toWord = fromIntegral
   toText (CharI c) = hexFormat (shiftL (val c) charShift .|. charTag)
     where
-      val :: Char -> Int64
+      val :: Char -> Int32
       val = fromIntegral . ord
 
 instance ToOperand Immediate where
