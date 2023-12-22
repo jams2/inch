@@ -5,8 +5,10 @@ module Constants
     fxShift,
     fxTag,
     fxMask,
+    charMask,
     charShift,
     charTag,
+    boolMask,
   )
 where
 
@@ -30,8 +32,14 @@ fxTag = 0
 fxMask :: Int
 fxMask = 3
 
+charMask :: Int
+charMask = 0x3f
+
 charShift :: Int
 charShift = 8
 
 charTag :: Int32
 charTag = 0x0F
+
+boolMask :: Int32
+boolMask = 0xBF -- boolMask & (T or F) give F. Doesn't clash with null

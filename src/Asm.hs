@@ -21,6 +21,7 @@ module Asm
     call,
     ret,
     sete,
+    Asm.not,
     nop,
     (%),
   )
@@ -74,6 +75,7 @@ data Instruction
   | Jmp !Operand
   | Call !Operand
   | Sete !Operand
+  | Not !Operand
   | Ret
   | Nop
   deriving (Show)
@@ -91,12 +93,13 @@ instance Emit Instruction where
   toText (Shl s d) = formatBinary "shlq" s d
   toText (Shr s d) = formatBinary "shrq" s d
   toText (Or s d) = formatBinary "or" s d
-  toText (And s d) = formatBinary "andq" s d
+  toText (And s d) = formatBinary "and" s d
   toText (Cmp s d) = formatBinary "cmp" s d
   toText (Movzb s d) = formatBinary "movzbq" s d
   toText (Jmp d) = formatUnary "jmp" d
   toText (Call d) = formatUnary "call" d
   toText (Sete d) = formatUnary "sete" d
+  toText (Not d) = formatUnary "not" d
   toText Ret = indent "ret"
   toText Nop = indent "nop"
 
@@ -137,6 +140,9 @@ movzb = binaryOp Movzb
 
 sete :: (ToOperand a) => a -> Line
 sete = Instruction . Sete . toOperand
+
+not :: (ToOperand a) => a -> Line
+not = Instruction . Not . toOperand
 
 call :: T.Text -> Line
 call = Instruction . Call . Location

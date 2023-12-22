@@ -151,6 +151,37 @@ compileNullP rands = unaryPrimCall "compileNullP" rands p
   where
     p = [cmp (int C.nil) RAX] <> boolCmp
 
+compileBooleanP :: [Expr] -> CompilationEnv
+compileBooleanP rands = unaryPrimCall "compileBooleanP" rands p
+  where
+    p =
+      [ Asm.and (int C.boolMask) AL, -- F & F and F & T both evaluate to F
+        cmp (int C.false) AL
+      ]
+        <> boolCmp
+
+compileCharP :: [Expr] -> CompilationEnv
+compileCharP rands = unaryPrimCall "compileCharP" rands p
+  where
+    p =
+      [ Asm.and (int C.charMask) AL,
+        cmp (int C.charTag) AL
+      ]
+        <> boolCmp
+
+compileNot :: [Expr] -> CompilationEnv
+compileNot rands = unaryPrimCall "compileNot" rands p
+  where
+    p = [cmp (int C.false) AL] <> boolCmp
+
+compileFxlognot :: [Expr] -> CompilationEnv
+compileFxlognot rands = unaryPrimCall "compileFxlognot" rands p
+  where
+    p =
+      [ Asm.not RAX,
+        Asm.and (int (0xFC :: Int)) AL -- reset the fixnum tag
+      ]
+
 primitives :: Env Primitive
 primitives =
   Map.fromList
@@ -160,5 +191,9 @@ primitives =
       ("char->fixnum", Primitive 1 compileCharToFixnum),
       ("fixnum?", Primitive 1 compileFixnumP),
       ("fxzero?", Primitive 1 compileFxzeroP),
-      ("null?", Primitive 1 compileNullP)
+      ("null?", Primitive 1 compileNullP),
+      ("boolean?", Primitive 1 compileBooleanP),
+      ("char?", Primitive 1 compileCharP),
+      ("not", Primitive 1 compileNot),
+      ("fxlognot", Primitive 1 compileFxlognot)
     ]
