@@ -8,7 +8,7 @@ import Test.Hspec
 spec :: Spec
 spec = do
   (runtime, asm, bin) <- runIO (getTestFiles "unary-primcall")
-  describe "Compile and run unary primitive calls" $ do
+  describe "unary primitive calls" $ do
     let shouldPrint = shouldPrint' runtime asm bin
     it "compiles and runs fxadd1" $ do
       "(fxadd1 0)" `shouldPrint` "1\n"
