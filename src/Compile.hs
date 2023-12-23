@@ -3,8 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Compile
-  ( CompilationResult,
-    compileFunctionHeader,
+  ( compileFunctionHeader,
     compilePrologue,
     compile,
     compileAll,
@@ -21,23 +20,35 @@ import Data.Text qualified as T
 
 newtype CompileError = CompileError T.Text deriving (Show)
 
-type CompilationResult = Either CompileError Program
+type Result = Either CompileError Program
 
 type Env a = Map.HashMap T.Text a
 
-newtype CompilationState = CompilationState {primitiveEnv :: Env Primitive}
+data CompilationState = CompilationState
+  { primitiveEnv :: !(Env Primitive),
+    counter :: !Int
+  }
 
-type CompilationEnv = State CompilationState CompilationResult
+type Compiler a = State CompilationState a
 
 -- | arity, compiler
-data Primitive = Primitive !Int !([Expr] -> CompilationEnv)
+data Primitive = Primitive !Int !([Expr] -> Compiler Result)
 
 initialState :: CompilationState
-initialState = CompilationState {primitiveEnv}
+initialState = CompilationState {primitiveEnv, counter}
   where
     primitiveEnv = primitives
+    counter = 0
 
-compileAll :: Expr -> CompilationResult
+getLabel :: Compiler T.Text
+getLabel = do
+  i <- gets counter
+  modify' increment
+  return $ "L_" <> T.pack (show i)
+  where
+    increment x = x {counter = 1 + counter x}
+
+compileAll :: Expr -> Result
 compileAll p = (<> [ret]) . (compilePrologue <>) <$> evalState (compile p) initialState
 
 compileFunctionHeader :: T.Text -> Program
@@ -78,7 +89,7 @@ compilePrologue =
        ]
     <> compileFunctionHeader "L_scheme_entry"
 
-compile :: Expr -> CompilationEnv
+compile :: Expr -> Compiler Result
 compile NilExpr = return $ Right [mov NilI RAX]
 compile TrueExpr = return $ Right [mov TrueI RAX]
 compile FalseExpr = return $ Right [mov FalseI RAX]
@@ -91,13 +102,13 @@ compile (AppExpr (SymbolExpr rator) rands) = do
     Just p -> compilePrimCall rator p rands
 compile _ = return $ Right [nop]
 
-compilePrimCall :: T.Text -> Primitive -> [Expr] -> CompilationEnv
+compilePrimCall :: T.Text -> Primitive -> [Expr] -> Compiler Result
 compilePrimCall rator (Primitive arity f) rands
   | length rands /= arity =
       return $ Left (CompileError $ "Wrong number of arguments to " <> rator)
   | otherwise = f rands
 
-unaryPrimCall :: T.Text -> [Expr] -> Program -> CompilationEnv
+unaryPrimCall :: T.Text -> [Expr] -> Program -> Compiler Result
 unaryPrimCall _ [rand] p = do
   prologue <- compile rand
   return $ (<> p) <$> prologue
@@ -105,20 +116,20 @@ unaryPrimCall name _ _ =
   return $
     Left (CompileError $ name <> ": invalid invocation")
 
-compileFxadd1 :: [Expr] -> CompilationEnv
+compileFxadd1 :: [Expr] -> Compiler Result
 compileFxadd1 rands = unaryPrimCall "compileFxadd1" rands [add (FixI 1) RAX]
 
-compileFxsub1 :: [Expr] -> CompilationEnv
+compileFxsub1 :: [Expr] -> Compiler Result
 compileFxsub1 rands = unaryPrimCall "compileFxsub1" rands [sub (FixI 1) RAX]
 
-compileFixnumToChar :: [Expr] -> CompilationEnv
+compileFixnumToChar :: [Expr] -> Compiler Result
 compileFixnumToChar rands = unaryPrimCall "compileFixnumToChar" rands p
   where
     p = [shl i RAX, Asm.or tag RAX]
     i = int $ C.charShift - C.fxShift
     tag = int C.charTag
 
-compileCharToFixnum :: [Expr] -> CompilationEnv
+compileCharToFixnum :: [Expr] -> Compiler Result
 compileCharToFixnum rands = unaryPrimCall "compileCharToFixnum" rands [shr i RAX]
   where
     i = int $ C.charShift - C.fxShift
@@ -134,24 +145,24 @@ boolCmp =
     i = int (6 :: Int)
     f = int (0x2F :: Int)
 
-compileFixnumP :: [Expr] -> CompilationEnv
+compileFixnumP :: [Expr] -> Compiler Result
 compileFixnumP rands = unaryPrimCall "compileFixnumP" rands p
   where
     p = [Asm.and mask RAX, cmp tag RAX] <> boolCmp
     mask = int C.fxMask
     tag = int C.fxTag
 
-compileFxzeroP :: [Expr] -> CompilationEnv
+compileFxzeroP :: [Expr] -> Compiler Result
 compileFxzeroP rands = unaryPrimCall "compileFxzeroP" rands p
   where
     p = [cmp (int (0 :: Int)) RAX] <> boolCmp
 
-compileNullP :: [Expr] -> CompilationEnv
+compileNullP :: [Expr] -> Compiler Result
 compileNullP rands = unaryPrimCall "compileNullP" rands p
   where
     p = [cmp (int C.nil) RAX] <> boolCmp
 
-compileBooleanP :: [Expr] -> CompilationEnv
+compileBooleanP :: [Expr] -> Compiler Result
 compileBooleanP rands = unaryPrimCall "compileBooleanP" rands p
   where
     p =
@@ -160,7 +171,7 @@ compileBooleanP rands = unaryPrimCall "compileBooleanP" rands p
       ]
         <> boolCmp
 
-compileCharP :: [Expr] -> CompilationEnv
+compileCharP :: [Expr] -> Compiler Result
 compileCharP rands = unaryPrimCall "compileCharP" rands p
   where
     p =
@@ -169,12 +180,12 @@ compileCharP rands = unaryPrimCall "compileCharP" rands p
       ]
         <> boolCmp
 
-compileNot :: [Expr] -> CompilationEnv
+compileNot :: [Expr] -> Compiler Result
 compileNot rands = unaryPrimCall "compileNot" rands p
   where
     p = [cmp (int C.false) AL] <> boolCmp
 
-compileFxlognot :: [Expr] -> CompilationEnv
+compileFxlognot :: [Expr] -> Compiler Result
 compileFxlognot rands = unaryPrimCall "compileFxlognot" rands p
   where
     p =
