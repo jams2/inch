@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -7,6 +8,7 @@ module Compile
     compilePrologue,
     compile,
     compileAll,
+    compileError,
   )
 where
 
@@ -15,10 +17,20 @@ import Arch
 import Asm
 import Constants qualified as C
 import Control.Monad.State.Lazy
+import Data.Either
 import Data.HashMap.Strict qualified as Map
+import Data.List (foldl')
 import Data.Text qualified as T
 
-newtype CompileError = CompileError T.Text deriving (Show)
+newtype ErrorGroup a = ErrorGroup [a] deriving (Show, Functor)
+
+type CompileError = ErrorGroup T.Text
+
+foldErrors :: [CompileError] -> CompileError
+foldErrors = ErrorGroup . foldl' (\acc (ErrorGroup es) -> acc <> es) []
+
+compileError :: a -> ErrorGroup a
+compileError msg = ErrorGroup $ pure msg
 
 type Result = Either CompileError Program
 
@@ -95,17 +107,38 @@ compile TrueExpr = return $ Right [mov TrueI RAX]
 compile FalseExpr = return $ Right [mov FalseI RAX]
 compile (FixnumExpr i) = return $ Right [mov (FixI i) RAX]
 compile (CharExpr c) = return $ Right [mov (CharI c) RAX]
+compile (IfExpr t c a) = compileIf t c a
 compile (AppExpr (SymbolExpr rator) rands) = do
   compiler <- gets (Map.lookup rator . primitiveEnv)
   case compiler of
-    Nothing -> return $ Left (CompileError $ "Unknown operator: " <> rator)
+    Nothing -> return $ Left (compileError $ "Unknown operator: " <> rator)
     Just p -> compilePrimCall rator p rands
 compile _ = return $ Right [nop]
+
+collectResults :: [Result] -> Result
+collectResults rs = case partitionEithers rs of
+  ([], chunks) -> Right $ concat chunks
+  (errors, _) -> Left $ foldErrors errors
+
+compileIf :: Expr -> Expr -> Expr -> Compiler Result
+compileIf t c a = do
+  altLabel <- getLabel
+  endLabel <- getLabel
+  chunks <-
+    sequence
+      [ compile t,
+        return $ Right [cmp (int C.false) AL, je altLabel],
+        compile c,
+        return $ Right [jmp endLabel, Label altLabel],
+        compile a,
+        return $ Right [Label endLabel]
+      ]
+  return $ collectResults chunks
 
 compilePrimCall :: T.Text -> Primitive -> [Expr] -> Compiler Result
 compilePrimCall rator (Primitive arity f) rands
   | length rands /= arity =
-      return $ Left (CompileError $ "Wrong number of arguments to " <> rator)
+      return $ Left (compileError $ "Wrong number of arguments to " <> rator)
   | otherwise = f rands
 
 unaryPrimCall :: T.Text -> [Expr] -> Program -> Compiler Result
@@ -114,7 +147,7 @@ unaryPrimCall _ [rand] p = do
   return $ (<> p) <$> prologue
 unaryPrimCall name _ _ =
   return $
-    Left (CompileError $ name <> ": invalid invocation")
+    Left (compileError $ name <> ": invalid invocation")
 
 compileFxadd1 :: [Expr] -> Compiler Result
 compileFxadd1 rands = unaryPrimCall "compileFxadd1" rands [add (FixI 1) RAX]

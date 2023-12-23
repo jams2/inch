@@ -13,6 +13,7 @@ data Expr
   | CharExpr !Char
   | StringExpr !T.Text
   | FixnumExpr !Int32
+  | IfExpr !Expr !Expr !Expr
   | BoolExpr !Bool
   | NilExpr
   deriving (Show, Eq)

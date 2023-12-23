@@ -61,3 +61,7 @@ spec = describe "Parser" $ do
   it "can parse bools" $ do
     parseMaybe expr "#t" `shouldBe` Just TrueExpr
     parseMaybe expr "#f" `shouldBe` Just FalseExpr
+  it "can parse if" $ do
+    parseMaybe expr "(if #t #t #f)"
+      `shouldBe` Just
+        (IfExpr (BoolExpr True) (BoolExpr True) (BoolExpr False))

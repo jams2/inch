@@ -101,16 +101,14 @@ lambda = do
   return $ LambdaExpr args body
 
 app :: Parser Expr
-app = do
-  _ <- word "("
-  rator <- expr
-  rands <- many expr
-  _ <- word ")"
-  return $ AppExpr rator rands
+app = parens $ AppExpr <$> expr <*> many expr
+
+if' :: Parser Expr
+if' = parens $ word "if" *> (IfExpr <$> expr <*> expr <*> expr)
 
 expr :: Parser Expr
 expr =
   choice
     [ immediate,
-      try lambda <|> app
+      try lambda <|> try if' <|> app
     ]

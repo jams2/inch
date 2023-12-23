@@ -19,6 +19,8 @@ module Asm
     cmp,
     movzb,
     call,
+    je,
+    jmp,
     ret,
     sete,
     Asm.not,
@@ -73,6 +75,7 @@ data Instruction
   | And !Operand !Operand
   | Cmp !Operand !Operand
   | Jmp !Operand
+  | Je !Operand
   | Call !Operand
   | Sete !Operand
   | Not !Operand
@@ -87,6 +90,7 @@ formatUnary :: (Emit a) => T.Text -> a -> T.Text
 formatUnary op d = indent $ T.intercalate " " [op, Emit.toText d]
 
 instance Emit Instruction where
+  -- Binary ops
   toText (Mov s d) = formatBinary "movq" s d
   toText (Add s d) = formatBinary "addq" s d
   toText (Sub s d) = formatBinary "subq" s d
@@ -96,10 +100,13 @@ instance Emit Instruction where
   toText (And s d) = formatBinary "and" s d
   toText (Cmp s d) = formatBinary "cmp" s d
   toText (Movzb s d) = formatBinary "movzbq" s d
+  -- Unary ops
   toText (Jmp d) = formatUnary "jmp" d
+  toText (Je d) = formatUnary "je" d
   toText (Call d) = formatUnary "call" d
   toText (Sete d) = formatUnary "sete" d
   toText (Not d) = formatUnary "not" d
+  -- Nullary ops
   toText Ret = indent "ret"
   toText Nop = indent "nop"
 
@@ -146,6 +153,12 @@ not = Instruction . Not . toOperand
 
 call :: T.Text -> Line
 call = Instruction . Call . Location
+
+je :: T.Text -> Line
+je = Instruction . Je . Location
+
+jmp :: T.Text -> Line
+jmp = Instruction . Jmp . Location
 
 ret :: Line
 ret = Instruction Ret
