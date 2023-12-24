@@ -4,39 +4,79 @@
 
 module AST
   ( Expr (..),
+    pattern LambdaExpr,
+    pattern AppExpr,
+    pattern IfExpr,
     pattern TrueExpr,
     pattern FalseExpr,
     pattern AndExpr,
+    pattern OrExpr,
     desugar,
+    typeOf,
   )
 where
 
 import Data.Int (Int32)
 import Data.Text qualified as T
 
+data Typ
+  = NilType
+  | BoolType
+  | CharType
+  | FixnumType
+  | SymbolType
+  | StringType
+  | ArrowType Typ Typ
+  | Void
+  deriving (Show, Eq)
+
 data Expr
-  = LambdaExpr ![Expr] !Expr
-  | SymbolExpr !T.Text
-  | AppExpr !Expr ![Expr]
-  | CharExpr !Char
+  = LambdaExprT !Typ ![Expr] !Expr
+  | AppExprT !Typ !Expr ![Expr]
   | StringExpr !T.Text
+  | SymbolExpr !T.Text
   | FixnumExpr !Int32
-  | IfExpr !Expr !Expr !Expr
+  | CharExpr !Char
   | BoolExpr !Bool
   | NilExpr
   deriving (Show, Eq)
 
-pattern TrueExpr :: Expr
-pattern TrueExpr = BoolExpr True
+typeOf :: Expr -> Typ
+typeOf (LambdaExprT t _ _) = t
+typeOf (AppExprT t _ _) = t
+typeOf (StringExpr _) = StringType
+typeOf (SymbolExpr _) = SymbolType
+typeOf (FixnumExpr _) = FixnumType
+typeOf (CharExpr _) = CharType
+typeOf (BoolExpr _) = BoolType
+typeOf NilExpr = NilType
 
-pattern FalseExpr :: Expr
-pattern FalseExpr = BoolExpr False
+pattern LambdaExpr :: [Expr] -> Expr -> Expr
+pattern LambdaExpr args body <- LambdaExprT _ args body
+  where
+    LambdaExpr args body = LambdaExprT Void args body
+
+pattern AppExpr :: Expr -> [Expr] -> Expr
+pattern AppExpr rator rands <- AppExprT _ rator rands
+  where
+    AppExpr rator rands = AppExprT Void rator rands
+
+pattern IfExpr :: Expr -> Expr -> Expr -> Expr
+pattern IfExpr t c a <- AppExprT _ (SymbolExpr "if") [t, c, a]
+  where
+    IfExpr t c a = AppExprT Void (SymbolExpr "if") [t, c, a]
 
 pattern AndExpr :: [Expr] -> Expr
 pattern AndExpr rands = (AppExpr (SymbolExpr "and") rands)
 
 pattern OrExpr :: [Expr] -> Expr
 pattern OrExpr rands = (AppExpr (SymbolExpr "or") rands)
+
+pattern TrueExpr :: Expr
+pattern TrueExpr = BoolExpr True
+
+pattern FalseExpr :: Expr
+pattern FalseExpr = BoolExpr False
 
 desugar :: Expr -> Expr
 desugar (LambdaExpr args body) = LambdaExpr args $ desugar body
