@@ -61,7 +61,11 @@ getLabel = do
     increment x = x {counter = 1 + counter x}
 
 compileAll :: Expr -> Result
-compileAll p = (<> [ret]) . (compilePrologue <>) <$> evalState (compile p) initialState
+compileAll p =
+  (<> [ret]) . (compilePrologue <>)
+    <$> evalState (compile p') initialState
+  where
+    p' = desugar p
 
 compileFunctionHeader :: T.Text -> Program
 compileFunctionHeader name =
