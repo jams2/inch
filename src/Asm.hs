@@ -169,7 +169,7 @@ nop = Instruction Nop
 data Operand
   = Location !T.Text
   | Register !Register
-  | Offset !Integer !Register
+  | Offset !Int !Register
   | Immediate !Immediate
   deriving (Eq, Show)
 
@@ -188,7 +188,7 @@ instance ToOperand Register where
 instance ToOperand Operand where
   toOperand = id
 
-(%) :: Integer -> Register -> Operand
+(%) :: Int -> Register -> Operand
 (%) = Offset
 
 infixl 4 %

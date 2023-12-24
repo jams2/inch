@@ -38,7 +38,8 @@ type Env a = Map.HashMap T.Text a
 
 data CompilationState = CompilationState
   { primitiveEnv :: !(Env Primitive),
-    counter :: !Int
+    counter :: !Int,
+    stackIndex :: !Int
   }
 
 type Compiler a = State CompilationState a
@@ -47,10 +48,11 @@ type Compiler a = State CompilationState a
 data Primitive = Primitive !Int !([Expr] -> Compiler Result)
 
 initialState :: CompilationState
-initialState = CompilationState {primitiveEnv, counter}
+initialState = CompilationState {primitiveEnv, counter, stackIndex}
   where
     primitiveEnv = primitives
     counter = 0
+    stackIndex = -C.wordSize
 
 getLabel :: Compiler T.Text
 getLabel = do
@@ -59,6 +61,9 @@ getLabel = do
   return $ "L_" <> T.pack (show i)
   where
     increment x = x {counter = 1 + counter x}
+
+nextStackIndex :: CompilationState -> CompilationState
+nextStackIndex x = x {stackIndex = stackIndex x - C.wordSize}
 
 compileAll :: Expr -> Result
 compileAll p =
@@ -153,6 +158,31 @@ unaryPrimCall name _ _ =
   return $
     Left (compileError $ name <> ": invalid invocation")
 
+binaryPrimCall :: T.Text -> [Expr] -> Program -> Compiler Result
+binaryPrimCall _ [x, y] p = do
+  prologue <- compileBinArgs x y
+  return $ (<> p) <$> prologue
+binaryPrimCall name _ _ =
+  return $
+    Left (compileError $ name <> ": invalid invocation")
+
+withStackIndex :: (Int -> Compiler Result) -> Compiler Result
+withStackIndex action = do
+  i <- gets stackIndex
+  action i
+
+withStackSave :: Compiler Result -> Compiler Result
+withStackSave action = withStackIndex $ \i -> do
+  result <- action
+  modify' nextStackIndex
+  return $ (<> [mov RAX (i % RSP)]) <$> result
+
+compileBinArgs :: Expr -> Expr -> Compiler Result
+compileBinArgs x y = do
+  x' <- withStackSave $ compile x
+  y' <- compile y
+  return $ collectResults [x', y']
+
 compileFxadd1 :: [Expr] -> Compiler Result
 compileFxadd1 rands = unaryPrimCall "compileFxadd1" rands [add (FixI 1) RAX]
 
@@ -230,6 +260,10 @@ compileFxlognot rands = unaryPrimCall "compileFxlognot" rands p
         Asm.and (int (0xFC :: Int)) AL -- reset the fixnum tag
       ]
 
+compileFxPlus :: [Expr] -> Compiler Result
+compileFxPlus rands = withStackIndex $ \i ->
+  binaryPrimCall "compileFxPlus" rands [add (i % RSP) RAX]
+
 primitives :: Env Primitive
 primitives =
   Map.fromList
@@ -243,5 +277,6 @@ primitives =
       ("boolean?", Primitive 1 compileBooleanP),
       ("char?", Primitive 1 compileCharP),
       ("not", Primitive 1 compileNot),
-      ("fxlognot", Primitive 1 compileFxlognot)
+      ("fxlognot", Primitive 1 compileFxlognot),
+      ("fx+", Primitive 2 compileFxPlus)
     ]

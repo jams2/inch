@@ -9,10 +9,14 @@ module Constants
     charShift,
     charTag,
     boolMask,
+    wordSize,
   )
 where
 
 import Data.Int (Int32)
+
+wordSize :: Int
+wordSize = 8 -- bytes
 
 nil :: Int32
 nil = 0x3F
