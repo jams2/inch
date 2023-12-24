@@ -21,6 +21,14 @@ import Data.Either
 import Data.HashMap.Strict qualified as Map
 import Data.List (foldl')
 import Data.Text qualified as T
+import Optimize
+
+compileAll :: Expr -> Result
+compileAll p =
+  optimizeImmediates . (<> [ret]) . (compilePrologue <>)
+    <$> evalState (compile p') initialState
+  where
+    p' = desugar p
 
 newtype ErrorGroup a = ErrorGroup [a] deriving (Show, Functor)
 
@@ -64,13 +72,6 @@ getLabel = do
 
 nextStackIndex :: CompilationState -> CompilationState
 nextStackIndex x = x {stackIndex = stackIndex x - C.wordSize}
-
-compileAll :: Expr -> Result
-compileAll p =
-  (<> [ret]) . (compilePrologue <>)
-    <$> evalState (compile p') initialState
-  where
-    p' = desugar p
 
 compileFunctionHeader :: T.Text -> Program
 compileFunctionHeader name =
