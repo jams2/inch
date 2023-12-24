@@ -6,6 +6,7 @@ module Asm
   ( Program,
     Line (..),
     Instruction (..),
+    Operand (..),
     SymbolType (..),
     Immediate (..),
     int,

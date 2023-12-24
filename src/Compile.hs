@@ -177,6 +177,11 @@ withStackSave action = withStackIndex $ \i -> do
   modify' nextStackIndex
   return $ (<> [mov RAX (i % RSP)]) <$> result
 
+withStackLoad :: Compiler Result -> Compiler Result
+withStackLoad action = withStackIndex $ \i -> do
+  result <- action
+  return $ (<> [mov (i % RSP) RAX]) <$> result
+
 compileBinArgs :: Expr -> Expr -> Compiler Result
 compileBinArgs x y = do
   x' <- withStackSave $ compile x
@@ -264,6 +269,15 @@ compileFxPlus :: [Expr] -> Compiler Result
 compileFxPlus rands = withStackIndex $ \i ->
   binaryPrimCall "compileFxPlus" rands [add (i % RSP) RAX]
 
+compileFxMinus :: [Expr] -> Compiler Result
+compileFxMinus rands = withStackIndex $ \i ->
+  binaryPrimCall
+    "compileFxMinus"
+    rands
+    [ sub RAX (i % RSP),
+      mov (i % RSP) RAX
+    ]
+
 primitives :: Env Primitive
 primitives =
   Map.fromList
@@ -278,5 +292,6 @@ primitives =
       ("char?", Primitive 1 compileCharP),
       ("not", Primitive 1 compileNot),
       ("fxlognot", Primitive 1 compileFxlognot),
-      ("fx+", Primitive 2 compileFxPlus)
+      ("fx+", Primitive 2 compileFxPlus),
+      ("fx-", Primitive 2 compileFxMinus)
     ]
