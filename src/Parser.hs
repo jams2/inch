@@ -88,7 +88,7 @@ immediate =
     ]
 
 identChars :: [Char]
-identChars = "+-<>?=."
+identChars = "+-<>?=.*"
 
 lambda :: Parser Expr
 lambda = do

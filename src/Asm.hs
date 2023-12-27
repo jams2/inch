@@ -13,8 +13,10 @@ module Asm
     mov,
     add,
     sub,
+    imul,
     shl,
     shr,
+    sar,
     Asm.or,
     Asm.and,
     cmp,
@@ -72,6 +74,8 @@ data Instruction
   | Sub !Operand !Operand
   | Shl !Operand !Operand
   | Shr !Operand !Operand
+  | Sar !Operand !Operand
+  | Imul !Operand !Operand
   | Or !Operand !Operand
   | And !Operand !Operand
   | Cmp !Operand !Operand
@@ -101,6 +105,8 @@ instance Emit Instruction where
   toText (And s d) = formatBinary "and" s d
   toText (Cmp s d) = formatBinary "cmp" s d
   toText (Movzb s d) = formatBinary "movzbq" s d
+  toText (Sar s d) = formatBinary "sarq" s d
+  toText (Imul s d) = formatBinary "imulq" s d
   -- Unary ops
   toText (Jmp d) = formatUnary "jmp" d
   toText (Je d) = formatUnary "je" d
@@ -145,6 +151,12 @@ cmp = binaryOp Cmp
 
 movzb :: (ToOperand a, ToOperand b) => a -> b -> Line
 movzb = binaryOp Movzb
+
+sar :: (ToOperand a, ToOperand b) => a -> b -> Line
+sar = binaryOp Sar
+
+imul :: (ToOperand a, ToOperand b) => a -> b -> Line
+imul = binaryOp Imul
 
 sete :: (ToOperand a) => a -> Line
 sete = Instruction . Sete . toOperand

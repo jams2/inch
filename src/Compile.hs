@@ -279,6 +279,22 @@ compileFxMinus rands = withStackIndex $ \i ->
       mov (i % RSP) RAX
     ]
 
+{-
+Input numbers are scaled by 4. This means multiplication is really
+4x * 4y = 16xy, where we want 4xy.
+
+Thus we implement multiplication as 4xy = (4x / 4) * 4y, using sarq to
+implement the division.
+-}
+compileFxMul :: [Expr] -> Compiler Result
+compileFxMul rands = withStackIndex $ \i ->
+  binaryPrimCall
+  "compileFxMul"
+  rands
+  [ sar (int C.fxShift) (i % RSP),
+    imul (i % RSP) RAX
+  ]
+
 primitives :: Env Primitive
 primitives =
   Map.fromList
@@ -294,5 +310,6 @@ primitives =
       ("not", Primitive 1 compileNot),
       ("fxlognot", Primitive 1 compileFxlognot),
       ("fx+", Primitive 2 compileFxPlus),
-      ("fx-", Primitive 2 compileFxMinus)
+      ("fx-", Primitive 2 compileFxMinus),
+      ("fx*", Primitive 2 compileFxMul)
     ]
