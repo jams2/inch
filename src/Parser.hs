@@ -81,8 +81,7 @@ symbol =
 immediate :: Parser Expr
 immediate =
   choice
-    [ nil,
-      bool,
+    [ bool,
       charLiteral,
       stringLiteral,
       try fixnum <|> symbol
@@ -103,12 +102,9 @@ lambda = do
 app :: Parser Expr
 app = parens $ AppExpr <$> expr <*> many expr
 
-if' :: Parser Expr
-if' = parens $ word "if" *> (IfExpr <$> expr <*> expr <*> expr)
-
 expr :: Parser Expr
 expr =
   choice
     [ immediate,
-      try lambda <|> try if' <|> app
+      try lambda <|> try app <|> nil
     ]

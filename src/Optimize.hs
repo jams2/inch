@@ -17,9 +17,9 @@ pairwiseWith f xs = loop xs
       Just p -> p ++ loop rest
 
 optimizeImmediates :: Program -> Program
-optimizeImmediates = pairwiseWith f
+optimizeImmediates = pairwiseWith foldRedundantMovs
   where
-    f
+    foldRedundantMovs
       (Instruction (Mov (Immediate v) (Register RAX)))
       ( Instruction
           ( Mov
@@ -27,7 +27,7 @@ optimizeImmediates = pairwiseWith f
               (Offset i r)
             )
         ) = Just [mov (Immediate v) (i % r)]
-    f (Instruction (Mov p q)) (Instruction (Mov q' p'))
+    foldRedundantMovs (Instruction (Mov p q)) (Instruction (Mov q' p'))
       | (p == p') && (q == q') = Just []
       | otherwise = Nothing
-    f _ _ = Nothing
+    foldRedundantMovs _ _ = Nothing
