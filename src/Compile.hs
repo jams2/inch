@@ -22,6 +22,7 @@ import Data.HashMap.Strict qualified as Map
 import Data.List (foldl')
 import Data.Text qualified as T
 import Optimize
+import Prelude hiding (and, or)
 
 compileAll :: Expr -> Result
 compileAll p =
@@ -198,7 +199,7 @@ compileFxsub1 rands = unaryPrimCall "compileFxsub1" rands [sub (FixI 1) RAX]
 compileFixnumToChar :: [Expr] -> Compiler Result
 compileFixnumToChar rands = unaryPrimCall "compileFixnumToChar" rands p
   where
-    p = [shl i RAX, Asm.or tag RAX]
+    p = [shl i RAX, or tag RAX]
     i = int $ C.charShift - C.fxShift
     tag = int C.charTag
 
@@ -207,12 +208,12 @@ compileCharToFixnum rands = unaryPrimCall "compileCharToFixnum" rands [shr i RAX
   where
     i = int $ C.charShift - C.fxShift
 
-boolCmp :: Program
-boolCmp =
-  [ sete AL, -- set al to 1 if equal
+boolCmp :: (Register -> Line) -> Program
+boolCmp op =
+  [ op AL, -- set al to 1 if comparison succeeds
     movzb AL RAX, -- extend al to fill rax
     shl i RAX, -- shift the result to the T/F discriminant bit
-    Asm.or f AL -- fill the leading bits with bool prefix
+    or f AL -- fill the leading bits with bool prefix
   ]
   where
     i = int (6 :: Int)
@@ -221,49 +222,49 @@ boolCmp =
 compileFixnumP :: [Expr] -> Compiler Result
 compileFixnumP rands = unaryPrimCall "compileFixnumP" rands p
   where
-    p = [Asm.and mask RAX, cmp tag RAX] <> boolCmp
+    p = [and mask RAX, cmp tag RAX] ++ boolCmp sete
     mask = int C.fxMask
     tag = int C.fxTag
 
 compileFxzeroP :: [Expr] -> Compiler Result
 compileFxzeroP rands = unaryPrimCall "compileFxzeroP" rands p
   where
-    p = [cmp (int (0 :: Int)) RAX] <> boolCmp
+    p = cmp (int (0 :: Int)) RAX : boolCmp sete
 
 compileNullP :: [Expr] -> Compiler Result
 compileNullP rands = unaryPrimCall "compileNullP" rands p
   where
-    p = [cmp (int C.nil) RAX] <> boolCmp
+    p = cmp (int C.nil) RAX : boolCmp sete
 
 compileBooleanP :: [Expr] -> Compiler Result
 compileBooleanP rands = unaryPrimCall "compileBooleanP" rands p
   where
     p =
-      [ Asm.and (int C.boolMask) AL, -- F & F and F & T both evaluate to F
+      [ and (int C.boolMask) AL, -- F & F and F & T both evaluate to F
         cmp (int C.false) AL
       ]
-        <> boolCmp
+        ++ boolCmp sete
 
 compileCharP :: [Expr] -> Compiler Result
 compileCharP rands = unaryPrimCall "compileCharP" rands p
   where
     p =
-      [ Asm.and (int C.charMask) AL,
+      [ and (int C.charMask) AL,
         cmp (int C.charTag) AL
       ]
-        <> boolCmp
+        ++ boolCmp sete
 
 compileNot :: [Expr] -> Compiler Result
 compileNot rands = unaryPrimCall "compileNot" rands p
   where
-    p = [cmp (int C.false) AL] <> boolCmp
+    p = cmp (int C.false) AL : boolCmp sete
 
-compileFxlognot :: [Expr] -> Compiler Result
-compileFxlognot rands = unaryPrimCall "compileFxlognot" rands p
+compileFxLogNot :: [Expr] -> Compiler Result
+compileFxLogNot rands = unaryPrimCall "compileFxLogNot" rands p
   where
     p =
       [ Asm.not RAX,
-        Asm.and (int (0xFC :: Int)) AL -- reset the fixnum tag
+        and (int (0xFC :: Int)) AL -- reset the fixnum tag
       ]
 
 compileFxPlus :: [Expr] -> Compiler Result
@@ -280,20 +281,56 @@ compileFxMinus rands = withStackIndex $ \i ->
     ]
 
 {-
-Input numbers are scaled by 4. This means multiplication is really
+Input fixnums are scaled by 4. This means naive multiplication will do
 4x * 4y = 16xy, where we want 4xy.
 
-Thus we implement multiplication as 4xy = (4x / 4) * 4y, using sarq to
+Thus we implement multiplication as 4xy = (4x / 4) * 4y, using sar to
 implement the division.
 -}
 compileFxMul :: [Expr] -> Compiler Result
 compileFxMul rands = withStackIndex $ \i ->
   binaryPrimCall
-  "compileFxMul"
-  rands
-  [ sar (int C.fxShift) (i % RSP),
-    imul (i % RSP) RAX
-  ]
+    "compileFxMul"
+    rands
+    [ sar (int C.fxShift) (i % RSP),
+      imul (i % RSP) RAX
+    ]
+
+compileFxLogAnd :: [Expr] -> Compiler Result
+compileFxLogAnd rands = withStackIndex $ \i ->
+  binaryPrimCall
+    "compileFxLogAnd"
+    rands
+    [and (i % RSP) RAX]
+
+compileFxLogOr :: [Expr] -> Compiler Result
+compileFxLogOr rands = withStackIndex $ \i ->
+  binaryPrimCall
+    "compileFxLogOr"
+    rands
+    [or (i % RSP) RAX]
+
+compileFxCmp :: T.Text -> (Register -> Line) -> [Expr] -> Compiler Result
+compileFxCmp name cmp' rands = withStackIndex $ \i ->
+  binaryPrimCall
+    name
+    rands
+    (cmp RAX (i % RSP) : boolCmp cmp')
+
+compileFxEq :: [Expr] -> Compiler Result
+compileFxEq = compileFxCmp "compileFxEq" sete
+
+compileFxLt :: [Expr] -> Compiler Result
+compileFxLt = compileFxCmp "compileFxLt" setl
+
+compileFxLte :: [Expr] -> Compiler Result
+compileFxLte = compileFxCmp "compileFxLte" setle
+
+compileFxGt :: [Expr] -> Compiler Result
+compileFxGt = compileFxCmp "compileFxGt" setg
+
+compileFxGte :: [Expr] -> Compiler Result
+compileFxGte = compileFxCmp "compileFxGte" setge
 
 primitives :: Env Primitive
 primitives =
@@ -308,8 +345,15 @@ primitives =
       ("boolean?", Primitive 1 compileBooleanP),
       ("char?", Primitive 1 compileCharP),
       ("not", Primitive 1 compileNot),
-      ("fxlognot", Primitive 1 compileFxlognot),
+      ("fxlognot", Primitive 1 compileFxLogNot),
       ("fx+", Primitive 2 compileFxPlus),
       ("fx-", Primitive 2 compileFxMinus),
-      ("fx*", Primitive 2 compileFxMul)
+      ("fx*", Primitive 2 compileFxMul),
+      ("fxlogand", Primitive 2 compileFxLogAnd),
+      ("fxlogor", Primitive 2 compileFxLogOr),
+      ("fx=", Primitive 2 compileFxEq),
+      ("fx<", Primitive 2 compileFxLt),
+      ("fx<=", Primitive 2 compileFxLte),
+      ("fx>", Primitive 2 compileFxGt),
+      ("fx>=", Primitive 2 compileFxGte)
     ]

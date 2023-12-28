@@ -9,6 +9,7 @@ module Asm
     Operand (..),
     SymbolType (..),
     Immediate (..),
+    ToOperand (..),
     int,
     mov,
     add,
@@ -26,6 +27,10 @@ module Asm
     jmp,
     ret,
     sete,
+    setl,
+    setle,
+    setg,
+    setge,
     Asm.not,
     nop,
     (%),
@@ -83,6 +88,10 @@ data Instruction
   | Je !Operand
   | Call !Operand
   | Sete !Operand
+  | Setl !Operand
+  | Setle !Operand
+  | Setg !Operand
+  | Setge !Operand
   | Not !Operand
   | Ret
   | Nop
@@ -112,6 +121,10 @@ instance Emit Instruction where
   toText (Je d) = formatUnary "je" d
   toText (Call d) = formatUnary "call" d
   toText (Sete d) = formatUnary "sete" d
+  toText (Setl d) = formatUnary "setl" d
+  toText (Setle d) = formatUnary "setle" d
+  toText (Setg d) = formatUnary "setg" d
+  toText (Setge d) = formatUnary "setge" d
   toText (Not d) = formatUnary "not" d
   -- Nullary ops
   toText Ret = indent "ret"
@@ -160,6 +173,18 @@ imul = binaryOp Imul
 
 sete :: (ToOperand a) => a -> Line
 sete = Instruction . Sete . toOperand
+
+setl :: (ToOperand a) => a -> Line
+setl = Instruction . Setl . toOperand
+
+setle :: (ToOperand a) => a -> Line
+setle = Instruction . Setle . toOperand
+
+setg :: (ToOperand a) => a -> Line
+setg = Instruction . Setg . toOperand
+
+setge :: (ToOperand a) => a -> Line
+setge = Instruction . Setge . toOperand
 
 not :: (ToOperand a) => a -> Line
 not = Instruction . Not . toOperand
