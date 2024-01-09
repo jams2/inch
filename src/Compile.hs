@@ -43,10 +43,11 @@ compileError msg = ErrorGroup $ pure msg
 
 type Result = Either CompileError Program
 
-type Env a = Map.HashMap T.Text a
+type Env a = Map.HashMap Symbol a
 
 data CompilationState = CompilationState
   { primitiveEnv :: !(Env Primitive),
+    lexicalEnv :: !(Env Int),
     counter :: !Int,
     stackIndex :: !Int
   }
@@ -57,9 +58,10 @@ type Compiler a = State CompilationState a
 data Primitive = Primitive !Int !([Expr] -> Compiler Result)
 
 initialState :: CompilationState
-initialState = CompilationState {primitiveEnv, counter, stackIndex}
+initialState = CompilationState {primitiveEnv, lexicalEnv, counter, stackIndex}
   where
     primitiveEnv = primitives
+    lexicalEnv = Map.empty
     counter = 0
     stackIndex = -C.wordSize
 
@@ -124,6 +126,7 @@ compile (AppExpr (SymbolExpr rator) rands) = do
   case compiler of
     Nothing -> return $ Left (compileError $ "Unknown operator: " <> rator)
     Just p -> compilePrimCall rator p rands
+-- compile (LetExpr binders body) = compileLet binders body
 compile _ = return $ Right [nop]
 
 collectResults :: [Result] -> Result
@@ -145,6 +148,9 @@ compileIf t c a = do
         return $ Right [Label endLabel]
       ]
   return $ collectResults chunks
+
+-- compileLet :: Expr -> Expr -> Compiler Result
+-- compileLet binders body = _
 
 compilePrimCall :: T.Text -> Primitive -> [Expr] -> Compiler Result
 compilePrimCall rator (Primitive arity f) rands
@@ -332,6 +338,9 @@ compileFxGt = compileFxCmp "compileFxGt" setg
 compileFxGte :: [Expr] -> Compiler Result
 compileFxGte = compileFxCmp "compileFxGte" setge
 
+compileCharEq :: [Expr] -> Compiler Result
+compileCharEq = compileFxCmp "compileCharEq" sete
+
 primitives :: Env Primitive
 primitives =
   Map.fromList
@@ -355,5 +364,7 @@ primitives =
       ("fx<", Primitive 2 compileFxLt),
       ("fx<=", Primitive 2 compileFxLte),
       ("fx>", Primitive 2 compileFxGt),
-      ("fx>=", Primitive 2 compileFxGte)
+      ("fx>=", Primitive 2 compileFxGte),
+      ("char=", Primitive 2 compileCharEq)
+      -- TODO: implement char=, char<, char<=, etc.
     ]

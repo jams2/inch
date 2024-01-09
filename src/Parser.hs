@@ -90,21 +90,12 @@ immediate =
 identChars :: [Char]
 identChars = "+-<>?=.*"
 
-lambda :: Parser Expr
-lambda = do
-  _ <- word "("
-  _ <- lexeme (C.string "lambda" <|> C.string "λ")
-  args <- parens $ many symbol
-  body <- expr
-  _ <- word ")"
-  return $ LambdaExpr args body
-
-app :: Parser Expr
-app = parens $ AppExpr <$> expr <*> many expr
+list :: Parser Expr
+list = ListExpr <$> parens (some expr)
 
 expr :: Parser Expr
 expr =
   choice
     [ immediate,
-      try lambda <|> try app <|> nil
+      try list <|> nil
     ]

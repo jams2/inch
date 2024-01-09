@@ -43,7 +43,7 @@ spec = describe "Parser" $ do
   it "can parse nil" $ do
     parseMaybe expr "()" `shouldBe` Just NilExpr
   it "can parse lambdas" $ do
-    parseMaybe expr "(lambda (x) x)"
+    parseMaybe expr "(λ (x) x)"
       `shouldBe` Just
         ( LambdaExpr
             [SymbolExpr "x"]
