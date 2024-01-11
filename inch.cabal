@@ -80,6 +80,7 @@ test-suite inch-test
   other-modules:
       Eval.ConstantSpec
       Eval.IfSpec
+      Eval.LetSpec
       Eval.PrimCall.BinarySpec
       Eval.PrimCall.UnarySpec
       Eval.Util

@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -21,13 +22,15 @@ import Data.Either
 import Data.HashMap.Strict qualified as Map
 import Data.List (foldl')
 import Data.Text qualified as T
-import Optimize
 import Prelude hiding (and, or)
+
+initialStackIndex :: Int
+initialStackIndex = -C.wordSize
 
 compileAll :: Expr -> Result
 compileAll p =
-  optimizeImmediates . (<> [ret]) . (compilePrologue <>)
-    <$> evalState (compile p') initialState
+  (<> [ret]) . (compilePrologue <>)
+    <$> evalState (compile p' initialStackIndex Map.empty) initialState
   where
     p' = desugar p
 
@@ -45,27 +48,29 @@ type Result = Either CompileError Program
 
 type Env a = Map.HashMap Symbol a
 
-data CompilationState = CompilationState
+type LexicalEnv = Env Int
+
+type StackIndex = Int
+
+data CompilationEnv = CompilationEnv
   { primitiveEnv :: !(Env Primitive),
-    lexicalEnv :: !(Env Int),
-    counter :: !Int,
-    stackIndex :: !Int
+    counter :: !Int
   }
 
-type Compiler a = State CompilationState a
+type CompilationState a = State CompilationEnv a
+
+type Compiler a = StackIndex -> LexicalEnv -> CompilationState a
 
 -- | arity, compiler
 data Primitive = Primitive !Int !([Expr] -> Compiler Result)
 
-initialState :: CompilationState
-initialState = CompilationState {primitiveEnv, lexicalEnv, counter, stackIndex}
+initialState :: CompilationEnv
+initialState = CompilationEnv {primitiveEnv, counter}
   where
     primitiveEnv = primitives
-    lexicalEnv = Map.empty
     counter = 0
-    stackIndex = -C.wordSize
 
-getLabel :: Compiler T.Text
+getLabel :: CompilationState T.Text
 getLabel = do
   i <- gets counter
   modify' increment
@@ -73,8 +78,13 @@ getLabel = do
   where
     increment x = x {counter = 1 + counter x}
 
-nextStackIndex :: CompilationState -> CompilationState
-nextStackIndex x = x {stackIndex = stackIndex x - C.wordSize}
+nextStackIndex :: StackIndex -> StackIndex
+nextStackIndex i = i - C.wordSize
+
+collectResults :: [Result] -> Result
+collectResults rs = case partitionEithers rs of
+  ([], chunks) -> Right $ concat chunks
+  (errors, _) -> Left $ foldErrors errors
 
 compileFunctionHeader :: T.Text -> Program
 compileFunctionHeader name =
@@ -115,85 +125,109 @@ compilePrologue =
     <> compileFunctionHeader "L_scheme_entry"
 
 compile :: Expr -> Compiler Result
-compile NilExpr = return $ Right [mov NilI RAX]
-compile TrueExpr = return $ Right [mov TrueI RAX]
-compile FalseExpr = return $ Right [mov FalseI RAX]
-compile (FixnumExpr i) = return $ Right [mov (FixI i) RAX]
-compile (CharExpr c) = return $ Right [mov (CharI c) RAX]
-compile (IfExpr t c a) = compileIf t c a
-compile (AppExpr (SymbolExpr rator) rands) = do
-  compiler <- gets (Map.lookup rator . primitiveEnv)
-  case compiler of
-    Nothing -> return $ Left (compileError $ "Unknown operator: " <> rator)
-    Just p -> compilePrimCall rator p rands
--- compile (LetExpr binders body) = compileLet binders body
-compile _ = return $ Right [nop]
+compile = \cases
+  NilExpr _ _ -> return $ Right [mov NilI RAX]
+  TrueExpr _ _ -> return $ Right [mov TrueI RAX]
+  FalseExpr _ _ -> return $ Right [mov FalseI RAX]
+  (FixnumExpr stackIndex) _ _ -> return $ Right [mov (FixI stackIndex) RAX]
+  (CharExpr c) _ _ -> return $ Right [mov (CharI c) RAX]
+  (IfExpr t c a) stackIndex env -> compileIf t c a stackIndex env
+  (LetExpr binders body) stackIndex env -> compileLet binders body stackIndex env
+  (AppExpr (SymbolExpr rator) rands) stackIndex env -> do
+    compiler <- gets (Map.lookup rator . primitiveEnv)
+    case compiler of
+      Nothing -> return $ Left (compileError $ "Unknown operator: " <> rator)
+      Just p -> compilePrimCall rator p rands stackIndex env
+  (SymbolExpr name) stackIndex env -> compileLookup name stackIndex env
+  _ _ _ -> return $ Right [nop]
 
-collectResults :: [Result] -> Result
-collectResults rs = case partitionEithers rs of
-  ([], chunks) -> Right $ concat chunks
-  (errors, _) -> Left $ foldErrors errors
+compileLet :: [Expr] -> Expr -> Compiler Result
+compileLet binders body stackIndex env = do
+  bindings <- loop binders env stackIndex env
+  case bindings of
+    Left err -> return $ Left err
+    Right (stackIndex', env', p) -> do
+      body' <- compile body stackIndex' env'
+      return $ (p <>) <$> body'
+  where
+    loop ::
+      [Expr] ->
+      LexicalEnv ->
+      Compiler (Either CompileError (StackIndex, LexicalEnv, Program))
+    loop [] _ stackIndex' env' = return $ Right (stackIndex', env', [])
+    loop (ListExpr [SymbolExpr name, rhs] : rest) initialEnv stackIndex' nextEnv = do
+      rhs' <- withStackSave rhs stackIndex' initialEnv
+      case rhs' of
+        (Left err) -> return $ Left err
+        (Right p') -> do
+          next <-
+            loop
+              rest
+              initialEnv
+              (nextStackIndex stackIndex')
+              (Map.insert name stackIndex' nextEnv)
+          return $ fmap (fmap (p' <>)) next
+    loop _ _ _ _ = return $ Left (compileError "")
+
+compileLookup :: Symbol -> Compiler Result
+compileLookup name _ env = do
+  case Map.lookup name env of
+    Nothing -> return $ Left (compileError ("Unbound variable: " <> name))
+    Just stackIndex -> return $ Right [mov (stackIndex % RSP) RAX]
 
 compileIf :: Expr -> Expr -> Expr -> Compiler Result
-compileIf t c a = do
+compileIf t c a stackIndex env = do
   altLabel <- getLabel
   endLabel <- getLabel
   chunks <-
     sequence
-      [ compile t,
+      [ compile t stackIndex env,
         return $ Right [cmp (int C.false) AL, je altLabel],
-        compile c,
+        compile c stackIndex env,
         return $ Right [jmp endLabel, Label altLabel],
-        compile a,
+        compile a stackIndex env,
         return $ Right [Label endLabel]
       ]
   return $ collectResults chunks
 
--- compileLet :: Expr -> Expr -> Compiler Result
--- compileLet binders body = _
-
 compilePrimCall :: T.Text -> Primitive -> [Expr] -> Compiler Result
-compilePrimCall rator (Primitive arity f) rands
+compilePrimCall rator (Primitive arity f) rands stackIndex env
   | length rands /= arity =
       return $ Left (compileError $ "Wrong number of arguments to " <> rator)
-  | otherwise = f rands
+  | otherwise = f rands stackIndex env
 
 unaryPrimCall :: T.Text -> [Expr] -> Program -> Compiler Result
-unaryPrimCall _ [rand] p = do
-  prologue <- compile rand
-  return $ (<> p) <$> prologue
-unaryPrimCall name _ _ =
-  return $
-    Left (compileError $ name <> ": invalid invocation")
+unaryPrimCall = \cases
+  _ [rand] body stackIndex env -> do
+    prologue <- compile rand stackIndex env
+    return $ (<> body) <$> prologue
+  name _ _ _ _ ->
+    return $
+      Left (compileError $ name <> ": invalid invocation")
 
 binaryPrimCall :: T.Text -> [Expr] -> Program -> Compiler Result
-binaryPrimCall _ [x, y] p = do
-  prologue <- compileBinArgs x y
-  return $ (<> p) <$> prologue
-binaryPrimCall name _ _ =
-  return $
-    Left (compileError $ name <> ": invalid invocation")
+binaryPrimCall = \cases
+  _ [x, y] body stackIndex env -> do
+    prologue <- compileBinArgs x y stackIndex env
+    return $ (<> body) <$> prologue
+  name _ _ _ _ ->
+    return $
+      Left (compileError $ name <> ": invalid invocation")
 
-withStackIndex :: (Int -> Compiler Result) -> Compiler Result
-withStackIndex action = do
-  i <- gets stackIndex
-  action i
+withStackSave :: Expr -> Compiler Result
+withStackSave p stackIndex env = do
+  p' <- compile p stackIndex env
+  return $ (<> [mov RAX (stackIndex % RSP)]) <$> p'
 
-withStackSave :: Compiler Result -> Compiler Result
-withStackSave action = withStackIndex $ \i -> do
-  result <- action
-  modify' nextStackIndex
-  return $ (<> [mov RAX (i % RSP)]) <$> result
-
-withStackLoad :: Compiler Result -> Compiler Result
-withStackLoad action = withStackIndex $ \i -> do
-  result <- action
-  return $ (<> [mov (i % RSP) RAX]) <$> result
+-- withStackLoad :: Compiler Result -> Compiler Result
+-- withStackLoad action = withStackIndex $ \i -> do
+-- result <- action
+-- return $ (<> [mov (i % RSP) RAX]) <$> result
 
 compileBinArgs :: Expr -> Expr -> Compiler Result
-compileBinArgs x y = do
-  x' <- withStackSave $ compile x
-  y' <- compile y
+compileBinArgs x y stackIndex env = do
+  x' <- withStackSave x stackIndex env
+  y' <- compile y (nextStackIndex stackIndex) env
   return $ collectResults [x', y']
 
 compileFxadd1 :: [Expr] -> Compiler Result
@@ -274,17 +308,17 @@ compileFxLogNot rands = unaryPrimCall "compileFxLogNot" rands p
       ]
 
 compileFxPlus :: [Expr] -> Compiler Result
-compileFxPlus rands = withStackIndex $ \i ->
-  binaryPrimCall "compileFxPlus" rands [add (i % RSP) RAX]
+compileFxPlus rands i = binaryPrimCall "compileFxPlus" rands [add (i % RSP) RAX] i
 
 compileFxMinus :: [Expr] -> Compiler Result
-compileFxMinus rands = withStackIndex $ \i ->
+compileFxMinus rands i =
   binaryPrimCall
     "compileFxMinus"
     rands
     [ sub RAX (i % RSP),
       mov (i % RSP) RAX
     ]
+    i
 
 {-
 Input fixnums are scaled by 4. This means naive multiplication will do
@@ -294,34 +328,34 @@ Thus we implement multiplication as 4xy = (4x / 4) * 4y, using sar to
 implement the division.
 -}
 compileFxMul :: [Expr] -> Compiler Result
-compileFxMul rands = withStackIndex $ \i ->
+compileFxMul rands i =
   binaryPrimCall
     "compileFxMul"
     rands
     [ sar (int C.fxShift) (i % RSP),
       imul (i % RSP) RAX
     ]
+    i
 
 compileFxLogAnd :: [Expr] -> Compiler Result
-compileFxLogAnd rands = withStackIndex $ \i ->
-  binaryPrimCall
-    "compileFxLogAnd"
-    rands
-    [and (i % RSP) RAX]
+compileFxLogAnd rands i =
+  binaryPrimCall "compileFxLogAnd" rands [and (i % RSP) RAX] i
 
 compileFxLogOr :: [Expr] -> Compiler Result
-compileFxLogOr rands = withStackIndex $ \i ->
+compileFxLogOr rands i =
   binaryPrimCall
     "compileFxLogOr"
     rands
     [or (i % RSP) RAX]
+    i
 
 compileFxCmp :: T.Text -> (Register -> Line) -> [Expr] -> Compiler Result
-compileFxCmp name cmp' rands = withStackIndex $ \i ->
+compileFxCmp name cmp' rands i =
   binaryPrimCall
     name
     rands
     (cmp RAX (i % RSP) : boolCmp cmp')
+    i
 
 compileFxEq :: [Expr] -> Compiler Result
 compileFxEq = compileFxCmp "compileFxEq" sete
