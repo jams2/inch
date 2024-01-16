@@ -5,8 +5,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Compile
-  ( compileFunctionHeader,
-    compilePrologue,
+  ( functionHeader,
+    prologue,
     compile,
     compileAll,
     compileError,
@@ -27,13 +27,6 @@ import Prelude hiding (and, or)
 initialStackIndex :: Int
 initialStackIndex = -C.wordSize
 
-compileAll :: Expr -> Result
-compileAll p =
-  (<> [ret]) . (compilePrologue <>)
-    <$> evalState (compile p' initialStackIndex Map.empty) initialState
-  where
-    p' = desugar p
-
 newtype ErrorGroup a = ErrorGroup [a] deriving (Show, Functor)
 
 type CompileError = ErrorGroup T.Text
@@ -48,13 +41,16 @@ type Result = Either CompileError Program
 
 type Env a = Map.HashMap Symbol a
 
-type LexicalEnv = Env Int
+data EnvMember = EnvStackIndex Int | EnvLabel T.Text
+
+type LexicalEnv = Env EnvMember
 
 type StackIndex = Int
 
 data CompilationEnv = CompilationEnv
   { primitiveEnv :: !(Env Primitive),
-    counter :: !Int
+    counter :: !Int,
+    functions :: !Program
   }
 
 type CompilationState a = State CompilationEnv a
@@ -65,10 +61,11 @@ type Compiler a = StackIndex -> LexicalEnv -> CompilationState a
 data Primitive = Primitive !Int !([Expr] -> Compiler Result)
 
 initialState :: CompilationEnv
-initialState = CompilationEnv {primitiveEnv, counter}
+initialState = CompilationEnv {primitiveEnv, counter, functions}
   where
     primitiveEnv = primitives
     counter = 0
+    functions = []
 
 getLabel :: CompilationState T.Text
 getLabel = do
@@ -86,8 +83,8 @@ collectResults rs = case partitionEithers rs of
   ([], chunks) -> Right $ concat chunks
   (errors, _) -> Left $ foldErrors errors
 
-compileFunctionHeader :: T.Text -> Program
-compileFunctionHeader name =
+functionHeader :: T.Text -> Program
+functionHeader name =
   [ TextDirective, -- .text
     GlobalDirective name, -- .global <name>
     TypeDirective name Function, -- .type <name>, @function
@@ -99,9 +96,9 @@ compileFunctionHeader name =
 --  RDI <- Context
 --  RSI <- stack base
 --  RDX <- heap address
-compilePrologue :: Program
-compilePrologue =
-  compileFunctionHeader "scheme_entry"
+prologue :: Program
+prologue =
+  functionHeader "scheme_entry"
     <> [ mov RDI RCX, -- store the Context location
          mov RBX (8 % RCX), -- preserve C register state
          mov RBP (48 % RCX),
@@ -122,7 +119,15 @@ compilePrologue =
          mov (120 % RCX) R15,
          ret
        ]
-    <> compileFunctionHeader "L_scheme_entry"
+    <> functionHeader "L_scheme_entry"
+
+compileAll :: Expr -> Result
+compileAll p =
+  let (result, finalState) =
+        runState (compile (desugar p) initialStackIndex Map.empty) initialState
+   in case result of
+        err@(Left _) -> err
+        Right p' -> Right $ functions finalState ++ prologue ++ p' ++ [ret]
 
 compile :: Expr -> Compiler Result
 compile = \cases
@@ -131,15 +136,72 @@ compile = \cases
   FalseExpr _ _ -> return $ Right [mov FalseI RAX]
   (FixnumExpr stackIndex) _ _ -> return $ Right [mov (FixI stackIndex) RAX]
   (CharExpr c) _ _ -> return $ Right [mov (CharI c) RAX]
+  (LetrecExpr binders body) stackIndex env -> compileLetrec binders body stackIndex env
   (IfExpr t c a) stackIndex env -> compileIf t c a stackIndex env
   (LetExpr binders body) stackIndex env -> compileLet binders body stackIndex env
-  (AppExpr (SymbolExpr rator) rands) stackIndex env -> do
-    compiler <- gets (Map.lookup rator . primitiveEnv)
-    case compiler of
-      Nothing -> return $ Left (compileError $ "Unknown operator: " <> rator)
-      Just p -> compilePrimCall rator p rands stackIndex env
+  (AppExpr (SymbolExpr rator) rands) stackIndex env ->
+    compileApp rator rands stackIndex env
   (SymbolExpr name) stackIndex env -> compileLookup name stackIndex env
   _ _ _ -> return $ Right [nop]
+
+compileLetrec :: [Expr] -> Expr -> Compiler Result
+compileLetrec binders body stackIndex env = do
+  bindings <- loop binders stackIndex env
+  case bindings of
+    Left err -> return $ Left err
+    Right (stackIndex', env', p) ->
+      fmap (p <>) <$> compile body stackIndex' env'
+  where
+    loop :: [Expr] -> Compiler (Either CompileError (StackIndex, LexicalEnv, Program))
+    loop [] stackIndex' env' = return $ Right (stackIndex', env', [])
+    loop (ListExpr [SymbolExpr name, lambda] : rest) stackIndex' env' = do
+      label <- getLabel
+      p1 <- compileLambda lambda env'
+      case p1 of
+        Left err -> return $ Left err
+        Right p -> do
+          -- collect function defs as we go, they will be prepended to the rest of
+          -- the generated code
+          modify' (\s -> s {functions = functions s ++ functionHeader label ++ p})
+          loop rest stackIndex' (Map.insert name (EnvLabel label) env')
+    loop p _ _ =
+      return $
+        Left (compileError $ "Invalid binding form in letrec: " <> T.pack (show p))
+
+compileLambda :: Expr -> LexicalEnv -> CompilationState Result
+compileLambda (LambdaExpr args body) env = do
+  let nextEnv =
+        foldl' (\env' (name, i) -> Map.insert name (EnvStackIndex i) env') env $
+          zip [n | SymbolExpr n <- args] [-C.wordSize, -2 * C.wordSize ..]
+  -- args stored on stack with one word left for the return address
+  fmap (<> [ret]) <$> compile body (-(length args + 1) * C.wordSize) nextEnv
+compileLambda p _ = return $ Left (compileError $ "Expected LambdaExpr, got: " <> T.pack (show p))
+
+compileApp :: Symbol -> [Expr] -> Compiler Result
+compileApp rator rands stackIndex env = do
+  compiler <- gets (Map.lookup rator . primitiveEnv)
+  case compiler of
+    Nothing -> case Map.lookup rator env of
+      Just (EnvLabel label) -> compileFuncall label rands stackIndex env
+      _ -> return $ Left (compileError $ "Unknown operator: " <> rator)
+    Just p -> compilePrimCall rator p rands stackIndex env
+
+compileFuncall :: T.Text -> [Expr] -> Compiler Result
+compileFuncall label rands stackIndex env =
+  fmap (++ funcall) <$> loop rands (nextStackIndex stackIndex) env
+  where
+    funcall =
+      [ add (int (stackIndex + C.wordSize)) RSP,
+        call label,
+        sub (int (stackIndex + C.wordSize)) RSP
+      ]
+    loop :: [Expr] -> Compiler Result
+    loop (x : xs) i e = do
+      p <- withStackSave x i e
+      case p of
+        err@(Left _) -> return err
+        Right p' -> fmap (p' <>) <$> loop xs (nextStackIndex i) e
+    loop _ _ _ = return $ Right []
 
 compileLet :: [Expr] -> Expr -> Compiler Result
 compileLet binders body stackIndex env = do
@@ -165,15 +227,15 @@ compileLet binders body stackIndex env = do
               rest
               initialEnv
               (nextStackIndex stackIndex')
-              (Map.insert name stackIndex' nextEnv)
+              (Map.insert name (EnvStackIndex stackIndex') nextEnv)
           return $ fmap (fmap (p' <>)) next
     loop _ _ _ _ = return $ Left (compileError "")
 
 compileLookup :: Symbol -> Compiler Result
 compileLookup name _ env = do
   case Map.lookup name env of
-    Nothing -> return $ Left (compileError ("Unbound variable: " <> name))
-    Just stackIndex -> return $ Right [mov (stackIndex % RSP) RAX]
+    Just (EnvStackIndex stackIndex) -> return $ Right [mov (stackIndex % RSP) RAX]
+    _ -> return $ Left (compileError ("Unbound variable: " <> name))
 
 compileIf :: Expr -> Expr -> Expr -> Compiler Result
 compileIf t c a stackIndex env = do
@@ -198,31 +260,23 @@ compilePrimCall rator (Primitive arity f) rands stackIndex env
 
 unaryPrimCall :: T.Text -> [Expr] -> Program -> Compiler Result
 unaryPrimCall = \cases
-  _ [rand] body stackIndex env -> do
-    prologue <- compile rand stackIndex env
-    return $ (<> body) <$> prologue
+  _ [rand] body stackIndex env ->
+    fmap (<> body) <$> compile rand stackIndex env
   name _ _ _ _ ->
     return $
       Left (compileError $ name <> ": invalid invocation")
 
 binaryPrimCall :: T.Text -> [Expr] -> Program -> Compiler Result
 binaryPrimCall = \cases
-  _ [x, y] body stackIndex env -> do
-    prologue <- compileBinArgs x y stackIndex env
-    return $ (<> body) <$> prologue
+  _ [x, y] body stackIndex env ->
+    fmap (<> body) <$> compileBinArgs x y stackIndex env
   name _ _ _ _ ->
     return $
       Left (compileError $ name <> ": invalid invocation")
 
 withStackSave :: Expr -> Compiler Result
-withStackSave p stackIndex env = do
-  p' <- compile p stackIndex env
-  return $ (<> [mov RAX (stackIndex % RSP)]) <$> p'
-
--- withStackLoad :: Compiler Result -> Compiler Result
--- withStackLoad action = withStackIndex $ \i -> do
--- result <- action
--- return $ (<> [mov (i % RSP) RAX]) <$> result
+withStackSave p stackIndex env =
+  fmap (<> [mov RAX (stackIndex % RSP)]) <$> compile p stackIndex env
 
 compileBinArgs :: Expr -> Expr -> Compiler Result
 compileBinArgs x y stackIndex env = do

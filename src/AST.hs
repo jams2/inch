@@ -6,7 +6,7 @@
 module AST
   ( Expr (..),
     Symbol,
-    pattern ListExpr,
+    pattern LetrecExpr,
     pattern LambdaExpr,
     pattern AppExpr,
     pattern IfExpr,
@@ -16,28 +16,16 @@ module AST
     pattern OrExpr,
     pattern LetExpr,
     desugar,
-    typeOf,
   )
 where
 
 import Data.Int (Int32)
 import Data.Text qualified as T
 
-data Typ
-  = NilType
-  | BoolType
-  | CharType
-  | FixnumType
-  | SymbolType
-  | StringType
-  | ArrowType Typ Typ
-  | Void
-  deriving (Show, Eq)
-
 type Symbol = T.Text
 
 data Expr
-  = ListExprT Typ [Expr]
+  = ListExpr [Expr]
   | StringExpr T.Text
   | SymbolExpr Symbol
   | FixnumExpr Int32
@@ -46,48 +34,20 @@ data Expr
   | NilExpr
   deriving (Eq, Show)
 
-class Typeable a where
-  typeOf :: a -> Typ
-
-instance Typeable Expr where
-  typeOf (ListExprT t _) = t
-  typeOf (StringExpr _) = StringType
-  typeOf (SymbolExpr _) = SymbolType
-  typeOf (FixnumExpr _) = FixnumType
-  typeOf (CharExpr _) = CharType
-  typeOf (BoolExpr _) = BoolType
-  typeOf NilExpr = NilType
-
-pattern ListExpr :: [Expr] -> Expr
-pattern ListExpr xs <- ListExprT _ xs
-  where
-    ListExpr xs = ListExprT Void xs
+pattern LetrecExpr :: [Expr] -> Expr -> Expr
+pattern LetrecExpr binders body = ListExpr [SymbolExpr "letrec", ListExpr binders, body]
 
 pattern LambdaExpr :: [Expr] -> Expr -> Expr
-pattern LambdaExpr args body <- ListExprT _ [SymbolExpr "λ", ListExpr args, body]
-  where
-    LambdaExpr args body =
-      ListExprT
-        Void
-        [SymbolExpr "λ", ListExpr args, body]
+pattern LambdaExpr args body = ListExpr [SymbolExpr "λ", ListExpr args, body]
 
 pattern LetExpr :: [Expr] -> Expr -> Expr
-pattern LetExpr binders body <- ListExprT _ [SymbolExpr "let", ListExprT _ binders, body]
-  where
-    LetExpr binders body =
-      ListExprT
-        Void
-        [SymbolExpr "let", ListExprT Void binders, body]
+pattern LetExpr binders body = ListExpr [SymbolExpr "let", ListExpr binders, body]
 
 pattern IfExpr :: Expr -> Expr -> Expr -> Expr
-pattern IfExpr t c a <- ListExprT _ [SymbolExpr "if", t, c, a]
-  where
-    IfExpr t c a = ListExprT Void [SymbolExpr "if", t, c, a]
+pattern IfExpr t c a = ListExpr [SymbolExpr "if", t, c, a]
 
 pattern AppExpr :: Expr -> [Expr] -> Expr
-pattern AppExpr rator rands <- ListExprT _ (rator : rands)
-  where
-    AppExpr rator rands = ListExprT Void (rator : rands)
+pattern AppExpr rator rands = ListExpr (rator : rands)
 
 pattern AndExpr :: [Expr] -> Expr
 pattern AndExpr rands = (AppExpr (SymbolExpr "and") rands)
@@ -119,5 +79,5 @@ desugar (OrExpr [x]) = desugar x
 desugar (OrExpr (x : xs)) = IfExpr (desugar x) (desugar x) (desugar $ OrExpr xs)
 -- AppExpr must come after other patterns that are defined in terms of AppExpr (e.g. AndExpr)
 desugar (AppExpr rator rands) = AppExpr (desugar rator) (map desugar rands)
-desugar (ListExprT t xs) = ListExprT t $ map desugar xs
+desugar (ListExpr xs) = ListExpr $ map desugar xs
 desugar expr = expr
