@@ -7,7 +7,7 @@ import Test.Hspec
 
 spec :: Spec
 spec = do
-  (runtime, asm, bin) <- runIO (getTestFiles "if")
+  (runtime, asm, bin) <- runIO (getTestFiles "let")
   describe "`let' expressions" $ do
     let shouldPrint = shouldPrint' runtime asm bin
     it "compiles and runs let expressions" $ do

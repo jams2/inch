@@ -6,6 +6,7 @@
 module AST
   ( Expr (..),
     Symbol,
+    pattern NilExpr,
     pattern LetrecExpr,
     pattern LambdaExpr,
     pattern AppExpr,
@@ -31,8 +32,10 @@ data Expr
   | FixnumExpr Int32
   | CharExpr Char
   | BoolExpr Bool
-  | NilExpr
   deriving (Eq, Show)
+
+pattern NilExpr :: Expr
+pattern NilExpr = ListExpr []
 
 pattern LetrecExpr :: [Expr] -> Expr -> Expr
 pattern LetrecExpr binders body = ListExpr [SymbolExpr "letrec", ListExpr binders, body]

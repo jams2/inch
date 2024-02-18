@@ -144,18 +144,33 @@ compile = \cases
   (SymbolExpr name) stackIndex env -> compileLookup name stackIndex env
   _ _ _ -> return $ Right [nop]
 
+data Binder = Binder !T.Text !Expr !T.Text -- name, lambda, label
+
+getBinder :: Expr -> CompilationState (Either CompileError Binder)
+getBinder (ListExpr [SymbolExpr name, lambda]) = Right . Binder name lambda <$> getLabel
+getBinder p =
+  return $
+    Left (compileError $ "Invalid binder form in letrec: " <> T.pack (show p))
+
 compileLetrec :: [Expr] -> Expr -> Compiler Result
 compileLetrec binders body stackIndex env = do
-  bindings <- loop binders stackIndex env
-  case bindings of
-    Left err -> return $ Left err
-    Right (stackIndex', env', p) ->
-      fmap (p <>) <$> compile body stackIndex' env'
+  binders' <- mapM getBinder binders
+  case partitionEithers binders' of
+    (e : es, _) -> return $ Left (foldErrors (e : es))
+    ([], bs) -> do
+      let env' =
+            foldl'
+              (\e (Binder name _ label) -> Map.insert name (EnvLabel label) e)
+              env
+              bs
+      ie <- loop bs stackIndex env'
+      case ie of
+        Left err -> return $ Left err
+        Right (i, e) -> compile body i e
   where
-    loop :: [Expr] -> Compiler (Either CompileError (StackIndex, LexicalEnv, Program))
-    loop [] stackIndex' env' = return $ Right (stackIndex', env', [])
-    loop (ListExpr [SymbolExpr name, lambda] : rest) stackIndex' env' = do
-      label <- getLabel
+    loop :: [Binder] -> Compiler (Either CompileError (StackIndex, LexicalEnv))
+    loop [] stackIndex' env' = return $ Right (stackIndex', env')
+    loop (Binder name lambda label : rest) stackIndex' env' = do
       p1 <- compileLambda lambda env'
       case p1 of
         Left err -> return $ Left err
@@ -164,9 +179,15 @@ compileLetrec binders body stackIndex env = do
           -- the generated code
           modify' (\s -> s {functions = functions s ++ functionHeader label ++ p})
           loop rest stackIndex' (Map.insert name (EnvLabel label) env')
-    loop p _ _ =
-      return $
-        Left (compileError $ "Invalid binding form in letrec: " <> T.pack (show p))
+
+bindLabels :: [Expr] -> LexicalEnv -> CompilationState (Either CompileError LexicalEnv)
+bindLabels [] env = return $ Right env
+bindLabels (ListExpr [SymbolExpr name, _] : rest) env = do
+  label <- getLabel
+  bindLabels rest (Map.insert name (EnvLabel label) env)
+bindLabels p _ =
+  return $
+    Left (compileError $ "Invalid binding form in letrec: " <> T.pack (show p))
 
 compileLambda :: Expr -> LexicalEnv -> CompilationState Result
 compileLambda (LambdaExpr args body) env = do
@@ -191,8 +212,13 @@ compileFuncall label rands stackIndex env =
   fmap (++ funcall) <$> loop rands (nextStackIndex stackIndex) env
   where
     funcall =
+      -- Adjust the stack pointer - take into account current offset, and the fact that
+      -- the x86 call instruction causes the return address to be pushed - we set
+      -- the stack pointer to one word before the current stackIndex, which we left
+      -- empty when compiling the args so nothing gets clobbered.
       [ add (int (stackIndex + C.wordSize)) RSP,
         call label,
+        -- Restore the stack pointer.
         sub (int (stackIndex + C.wordSize)) RSP
       ]
     loop :: [Expr] -> Compiler Result

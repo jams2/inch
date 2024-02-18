@@ -59,9 +59,6 @@ fixnum = FixnumExpr <$> (L.signed space integer <?> "fixnum")
   where
     integer = lexeme L.decimal
 
-nil :: Parser Expr
-nil = NilExpr <$ lexeme (C.string "()")
-
 bool :: Parser Expr
 bool = BoolExpr <$> (True <$ lexeme (C.string "#t") <|> False <$ lexeme (C.string "#f"))
 
@@ -91,11 +88,7 @@ identChars :: [Char]
 identChars = "+-<>?=.*"
 
 list :: Parser Expr
-list = ListExpr <$> parens (some expr)
+list = ListExpr <$> parens (many expr)
 
 expr :: Parser Expr
-expr =
-  choice
-    [ immediate,
-      try list <|> nil
-    ]
+expr = choice [immediate, list]
